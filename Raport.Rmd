@@ -15,11 +15,14 @@ library(knitr)
 
 # Wstęp
 
+(tutaj napiszemy wstęp)
 
 
 ## WIG20
 
+Instrumentem bazowym, z którym będziemy pracować jest indeks WIG20 reprezentujący kondycję 20 największych pod względem kapitalizacji spółek notowanych na warszawskiej Giełdzie Papierów Wartościowych z zastrzeżeniem, że z jednego sektora nie może znaleźć się tam więcej niż 5 spółek (WIKIPEDIA). Wpływ poszczególnych spółek jest ważony ich kapitalizacją (POTRZEBNE ŹRÓDŁO).
 
+Zanim przejdziemy do właściwej części analizy, wyznaczymy parametry modelu Blacka-Scholesa na podstawie historycznych notowań indeksu.
 
 ```{r, echo=FALSE}
 
@@ -238,85 +241,9 @@ legend_plot <- ggplot() +
 ```
 
 
-```{r, echo=FALSE, fig.width=7, fig.height=4.8, out.width="100%"}
-# Parametry t, n, M dla poniższych symulacji
-T_val <- 1
-n <- 250
-M <- 100
 
-# Podział okresu symulowanych ścieżek
-time_seq <- seq(0, T_val, length.out = n + 1)
 
-# Wartość początkowa indeksu dla symulowanych ścieżek
-dane_2022 <- wig20_data %>% filter(year(Data) == 2022)
-S0 <- dane_2022$Otwarcie[1]
-
-# Symulacje
-simulations <- list(
-  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, M),
-  gbm_simulation(S0, drift_vol_estimates["mu", "2020"], drift_vol_estimates["sigma", "2020"], T_val, n, M),
-  gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
-  gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
-)
-
-title_descriptions_details <- c('01-01-2021 : 31-12-2021', '01-01-2020 : 31-12-2021', 
-                                '01-01-2019 : 31-12-2021', '01-01-2018 : 31-12-2021')
-
-# Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot - POPRAWIONA
-plot_simulation_panel <- function(sim_matrix, title_suffix, actual_data) {
-  df_sim <- as.data.frame(sim_matrix) %>% 
-    mutate(time = time_seq) %>%
-    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
-  
-  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
-  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
-  
-  df_q <- data.frame(
-    time = time_seq,
-    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
-    med = apply(sim_matrix, 1, median),
-    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
-  )
-  
-  ggplot() +
-    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
-              color = "black", alpha = 0.18, linewidth = 0.3) +
-    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022"), 
-              linewidth = 1.2) +
-    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
-              linewidth = 1.2, alpha = 0.8) +
-    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
-              linewidth = 1.2, alpha = 0.8) +
-    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
-              linewidth = 1.2, alpha = 0.8) +
-    scale_color_manual(
-      name = "", 
-      values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
-                 "Mediana" = "blue", "Kwantyl 0.95" = "red")
-    ) +
-    labs(
-      title = paste("Dryf i zmienność estymowane na podstawie danych z okresu: \n", title_suffix),
-      x = "Czas (lata)", 
-      y = "Cena"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      legend.position = "bottom",
-      legend.text = element_text(size = 12),
-      plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 14),
-      axis.text = element_text(size = 12),
-      panel.grid.minor = element_blank()
-    ) +
-    guides(color = guide_legend(override.aes = list(linewidth = 2)))
-}
-plot_simulation_panel(simulations[[1]], title_descriptions_details[1], dane_2022)
-plot_simulation_panel(simulations[[2]], title_descriptions_details[2], dane_2022)
-plot_simulation_panel(simulations[[3]], title_descriptions_details[3], dane_2022)
-plot_simulation_panel(simulations[[4]], title_descriptions_details[4], dane_2022)
-```
-
-### Histogramy historycznych zwrotów a symulowanych
+### Histogramy historycznych zwrotów a symulowanych metodą standardową
 
 Poniżej przedstawiamy porównanie histogramów zwrotów historycznych z roku 2022 indeksu WIG20, z histogramem zwrotów z wygenerowanych trajektorii.
 
@@ -406,7 +333,7 @@ bootstrap_simulation <- function(S0, returns_set, n, M) {
 }
 ```
 
-```{r, echo=FALSE, fig.width=7, fig.height=4.8, out.width="100%"}
+```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%"}
 
 ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
@@ -421,16 +348,86 @@ bootstrap_simulations_list <- list(
   bootstrap_simulation(S0, ret_2018_2021, n, M)
 )
 
+# Funkcja do wykresów bootstrap
 plot_boot_panel <- function(sim_matrix, title_suffix, actual_data) {
-  p <- plot_simulation_panel(sim_matrix, title_suffix, actual_data)
-  p + labs(title = paste("Zwroty losowane do boostrappingu\nz okresu:", title_suffix))
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.18, linewidth = 0.3) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "blue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Bootstrap z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
 }
 
-plot_boot_panel(bootstrap_simulations_list[[1]], title_descriptions_details[1], dane_2022)
-plot_boot_panel(bootstrap_simulations_list[[2]], title_descriptions_details[2], dane_2022)
-plot_boot_panel(bootstrap_simulations_list[[3]], title_descriptions_details[3], dane_2022)
-plot_boot_panel(bootstrap_simulations_list[[4]], title_descriptions_details[4], dane_2022)
+# Tworzenie 4 wykresów bootstrap
+b1 <- plot_boot_panel(bootstrap_simulations_list[[1]], title_descriptions_details[1], dane_2022)
+b2 <- plot_boot_panel(bootstrap_simulations_list[[2]], title_descriptions_details[2], dane_2022)
+b3 <- plot_boot_panel(bootstrap_simulations_list[[3]], title_descriptions_details[3], dane_2022)
+b4 <- plot_boot_panel(bootstrap_simulations_list[[4]], title_descriptions_details[4], dane_2022)
 
+# Wspólna legenda
+legend_plot_boot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "blue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(b1 | b2) / (b3 | b4) / legend_plot_boot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje Bootstrap notowań WIG20 na rok 2022",
+    subtitle = "Porównanie symulacji z różnymi okresami losowania zwrotów",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
 ```
 
 ### Histogramy historycznych zwrotów a symulowanych metodą bootstrap
@@ -497,5 +494,406 @@ hist2 <- ggplot() +
 
 hist1 | hist2
 ```
+
+# Symulacje notowań indeksu na lata 2022-2023
+
+## Symulacja metodą standardową
+
+Ponownie w pierwszej kolejności symulujemy w sposób standardowy. 
+
+```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%"}
+# Parametry t, n, M dla poniższych symulacji - 2 LATA
+T_val <- 2
+n <- 500  # 250 dni * 2 lata
+M <- 100
+
+# Podział okresu symulowanych ścieżek
+time_seq <- seq(0, T_val, length.out = n + 1)
+
+# Wartość początkowa indeksu dla symulowanych ścieżek
+dane_2022_2023 <- wig20_data %>% filter(year(Data) %in% c(2022, 2023))
+S0 <- dane_2022_2023$Otwarcie[1]
+
+# Symulacje na 2 lata
+simulations_2y <- list(
+  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2020"], drift_vol_estimates["sigma", "2020"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
+)
+
+title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
+
+# Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
+plot_simulation_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.18, linewidth = 0.3) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022-2023"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "blue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Estymacja z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# Tworzenie 4 wykresów
+p1 <- plot_simulation_panel_2y(simulations_2y[[1]], title_descriptions_details[1], dane_2022_2023)
+p2 <- plot_simulation_panel_2y(simulations_2y[[2]], title_descriptions_details[2], dane_2022_2023)
+p3 <- plot_simulation_panel_2y(simulations_2y[[3]], title_descriptions_details[3], dane_2022_2023)
+p4 <- plot_simulation_panel_2y(simulations_2y[[4]], title_descriptions_details[4], dane_2022_2023)
+
+# Wspólna legenda
+legend_plot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022-2023"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "blue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(p1 | p2) / (p3 | p4) / legend_plot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje GBM notowań WIG20 na lata 2022-2023",
+    subtitle = "Porównanie symulacji z różnymi okresami estymacji dryfu i zmienności",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+### Histogramy historycznych zwrotów a symulowanych metodą standardową
+
+```{r, echo=FALSE}
+dane_2022_2023_zwroty <- wig20_data %>% filter(year(Data) %in% c(2022, 2023)) %>% pull(Zwrot)
+
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+mu_fit <- mean(dane_2022_2023_zwroty, na.rm = TRUE)
+std_fit <- sd(dane_2022_2023_zwroty, na.rm = TRUE)
+p_norm <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_fit, sd = std_fit))
+
+sim_mat <- simulations_2y[[1]]
+sim_returns <- as.vector((sim_mat[-1, ] - sim_mat[-nrow(sim_mat), ]) / sim_mat[-nrow(sim_mat), ])
+
+hist1 <- ggplot() +
+  geom_histogram(aes(x = dane_2022_2023_zwroty, y = after_stat(density)), 
+                 bins = 30, 
+                 fill = "#FF6B6B",      
+                 color = "#C92A2A",     
+                 alpha = 0.8) +
+  geom_line(data = p_norm, aes(x = x, y = y), 
+            color = "#2D3436", linewidth = 1.5, alpha = 0.9) +
+  coord_cartesian(xlim = c(-0.06, 0.06), ylim = c(0, 40)) +
+  labs(
+    title = "Zwroty historyczne indeksu WIG20",
+    subtitle = "Okres: 01-01-2022 : 31-12-2023",
+    x = "Zwrot", 
+    y = "Gęstość"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold", color = "#C92A2A", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  )
+
+hist2 <- ggplot() +
+  geom_histogram(aes(x = sim_returns, y = after_stat(density)), 
+                 bins = 30, 
+                 fill = "#4ECDC4",     
+                 color = "#00A896",     
+                 alpha = 0.8) +
+  geom_line(data = p_norm, aes(x = x, y = y), 
+            color = "#2D3436", linewidth = 1.5, alpha = 0.9) +
+  coord_cartesian(xlim = c(-0.06, 0.06), ylim = c(0, 40)) +
+  labs(
+    title = "Zwroty symulowanych trajektorii",
+    subtitle = "Symulacja GBM na okres 2022-2023",
+    x = "Zwrot", 
+    y = ""
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold", color = "#00A896", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  )
+
+hist1 | hist2
+```
+## Symulacje metodą bootstrap
+
+```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%"}
+# Zbiory zwrotów
+ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
+ret_2019_2021 <- wig20_data %>% filter(year(Data) %in% 2019:2021) %>% pull(Zwrot)
+ret_2018_2021 <- wig20_data %>% filter(year(Data) %in% 2018:2021) %>% pull(Zwrot)
+
+# Symulacje bootstrapowe na 2 lata
+bootstrap_simulations_2y <- list(
+  bootstrap_simulation(S0, ret_2021, n, M),
+  bootstrap_simulation(S0, ret_2020_2021, n, M),
+  bootstrap_simulation(S0, ret_2019_2021, n, M),
+  bootstrap_simulation(S0, ret_2018_2021, n, M)
+)
+
+# Funkcja do wykresów bootstrap
+plot_boot_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.18, linewidth = 0.3) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022-2023"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "blue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Bootstrap z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# Tworzenie 4 wykresów bootstrap
+b1 <- plot_boot_panel_2y(bootstrap_simulations_2y[[1]], title_descriptions_details[1], dane_2022_2023)
+b2 <- plot_boot_panel_2y(bootstrap_simulations_2y[[2]], title_descriptions_details[2], dane_2022_2023)
+b3 <- plot_boot_panel_2y(bootstrap_simulations_2y[[3]], title_descriptions_details[3], dane_2022_2023)
+b4 <- plot_boot_panel_2y(bootstrap_simulations_2y[[4]], title_descriptions_details[4], dane_2022_2023)
+
+# Wspólna legenda
+legend_plot_boot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022-2023"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "blue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(b1 | b2) / (b3 | b4) / legend_plot_boot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje Bootstrap notowań WIG20 na lata 2022-2023",
+    subtitle = "Porównanie symulacji z różnymi okresami losowania zwrotów",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+### Histogramy historycznych zwrotów a symulowanych metodą bootstrap
+
+```{r, echo=FALSE}
+dane_2022_2023_zwroty <- wig20_data %>% filter(year(Data) %in% c(2022, 2023)) %>% pull(Zwrot)
+
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+mu_fit <- mean(dane_2022_2023_zwroty, na.rm = TRUE)
+std_fit <- sd(dane_2022_2023_zwroty, na.rm = TRUE)
+p_norm <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_fit, sd = std_fit))
+
+# Zwroty z symulacji BOOTSTRAP
+boot_mat <- bootstrap_simulations_2y[[1]]
+boot_returns <- as.vector((boot_mat[-1, ] - boot_mat[-nrow(boot_mat), ]) / boot_mat[-nrow(boot_mat), ])
+
+hist1 <- ggplot() +
+  geom_histogram(aes(x = dane_2022_2023_zwroty, y = after_stat(density)), 
+                 bins = 30, 
+                 fill = "#FF6B6B",      
+                 color = "#C92A2A",     
+                 alpha = 0.8) +
+  geom_line(data = p_norm, aes(x = x, y = y), 
+            color = "#2D3436", linewidth = 1.5, alpha = 0.9) +
+  coord_cartesian(xlim = c(-0.06, 0.06), ylim = c(0, 40)) +
+  labs(
+    title = "Zwroty historyczne indeksu WIG20",
+    subtitle = "Okres: 01-01-2022 : 31-12-2023",
+    x = "Zwrot", 
+    y = "Gęstość"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold", color = "#C92A2A", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  )
+
+hist2 <- ggplot() +
+  geom_histogram(aes(x = boot_returns, y = after_stat(density)), 
+                 bins = 30, 
+                 fill = "#4ECDC4",     
+                 color = "#00A896",     
+                 alpha = 0.8) +
+  geom_line(data = p_norm, aes(x = x, y = y), 
+            color = "#2D3436", linewidth = 1.5, alpha = 0.9) +
+  coord_cartesian(xlim = c(-0.06, 0.06), ylim = c(0, 40)) +
+  labs(
+    title = "Zwroty symulowanych trajektorii",
+    subtitle = "Symulacja Bootstrap na okres 2022-2023",
+    x = "Zwrot", 
+    y = ""
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold", color = "#00A896", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  )
+
+hist1 | hist2
+```
+
+# Opcje na WIG20
+
+Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrumentami pochodnymi, w tym europejskimi, waniliowymi opcjami CALL i PUT na indeks WIG20. Inastrumenty te charakteryzują się następującymi własnościami:
+
+* mnożnik: 10 zł za każdy punkt indeksowy
+
+* 6 możliwości wyboru miesiąca wygaśnięcia: 3 najbliższe miesiące kalendarzowe + 3 kolejne miesiące
+z marcowego cyklu kwartalnego (marzec, czerwiec,
+wrzesień, grudzień)
+
+* dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii. 
+
+GPW określa ryzyko handlu opcjami na najwyższym możliwym poziomie, głównie ze względu na potencjalną niską płynność instrumentu i brak możliwości zamknięcia pozycji przed terminem wygaśnięcia. 
+
+### Strategia LONG CALL
+
+(tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
+
+### Strategoa SHORT CALL
+
+(tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
+
+### Payoff
+
+Payoff to wartość opcji w momencie jej wygaśnięcia w chwili T na podstawie relacji wartości instrumentu bazowego S(T) i ceny wykonania opcji K, czyli przy pominięciu ceny zakupu samej opcji. 
+
+Dla opcji CALL:
+
+$$\text{Payoff} = \max{(S(T) - K, 0)}$$
+
+Dla opcji PUT:
+
+$$\text{Payoff} = \max{(K - S(T), 0)}$$
+
+(KID, standard - STRONA GPW https://www.gpw.pl/standardy-warunki-obrotu)
+
+```{r, echo=FALSE}
+
+# Parametry
+K <- 100  # strike
+S_range <- seq(50, 150, by = 1)  # zakres cen aktywa
+
+# Payoffy
+df <- data.frame(S = S_range) %>%
+  mutate(
+    CALL = pmax(S - K, 0),
+    PUT = pmax(K - S, 0)
+  )
+
+# Wykres CALL
+plot_call <- ggplot(df, aes(x = S, y = CALL)) +
+  geom_line(color = "#3498DB", linewidth = 1.5) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  labs(title = "CALL", x = expression(S[T]), y = "Payoff") +
+  theme_minimal(base_size = 14)
+
+# Wykres PUT
+plot_put <- ggplot(df, aes(x = S, y = PUT)) +
+  geom_line(color = "#E74C3C", linewidth = 1.5) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  labs(title = "PUT", x = expression(S[T]), y = "") +
+  theme_minimal(base_size = 14)
+
+# Obok siebie
+plot_call | plot_put
+```
+
 
 
