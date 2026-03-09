@@ -2,7 +2,9 @@
 title: "Delta i gamma hedging"
 author: "Tomasz Kąkol, Mikołaj Pamuła, Jakub Żuk"
 date: "2026-03-07"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -324,7 +326,7 @@ $$
 # n - liczba 'kroków', tj. podział okresu na części,
 # M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
 
-bootstrap_simulation <- function(S0, returns_set, n, M) {
+  bootstrap_simulation <- function(S0, returns_set, n, M) {
   sampled_increments <- matrix(sample(returns_set, size = M * n, replace = TRUE), nrow = M, ncol = n)
   sampled_increments_transformed <- cbind(rep(1, M), 1 + sampled_increments)
   simulated_price_paths <- S0 * t(apply(sampled_increments_transformed, 1, cumprod))
@@ -1036,6 +1038,35 @@ plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
 axis(side=4)
 ```
 
+#Moja propozycja. Nie jestem jej pewny, ale wydaje mi się lekko bardziej sensowna
 
+#Nie powinniśmy losować tych samych indeksów w tym samym kroku, by była rzeczywista para zwrotów z historii?
 
+W ten sposób możemy zaobserwować rzeczywistą korelację historyczną pomiędzy cenami w tych samych okresach, ponieważ losujemy ten sam moment, przez co lepiej możemy zoabserwować, co się działo. Bo to, że są skorelowane, nie znaczy że spadek ceny KGHM implikuje spadek WIG20 i w drugą stronę. 
 
+```{r, echo=FALSE}
+correlated_bootstrap_simulation2 <- function(S01, S02, returns_set1, returns_set2, n, M) {
+  if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
+  N = length(returns_set1)
+  
+  simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
+  simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
+  
+  for (i in 1:M) {
+    random_indexes = sample(1:N, size = n, replace = TRUE)  # losujemy te same indeksy
+    sampled_increments_for_first_asset  = returns_set1[random_indexes]
+    sampled_increments_for_second_asset = returns_set2[random_indexes]
+    
+    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
+    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
+  }
+  
+  return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
+}
+x = correlated_bootstrap_simulation2(wigS0, kghmS0, wig_2021_zwroty, kghm_2021_zwroty, 250, 1)
+
+plot(1:251, x[[1]], type='l', col="blue", xlab = '', ylab='', main = 'Symulacja (metodą bootstrapową) notowań WIG20 i KGHM jako \n przykład dwóch skorelowanych geometrycznych ruchów Browna')
+par(new=TRUE)
+plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
+axis(side=4)
+```
