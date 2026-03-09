@@ -895,5 +895,147 @@ plot_put <- ggplot(df, aes(x = S, y = PUT)) +
 plot_call | plot_put
 ```
 
+## Symulacje skorelowanych geometrycznych ruchów Browna
+
+# Symulacje metodą standardową
+
+Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$, których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
+$$
+X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}
+$$
+to $S_t^{(1)}$ i $S_t^{(2)}$ możemy przedstawić w postaci następujących stochastycznych równań różniczkowych:
+$$
+dS_t^{(1)} = S_t^{(1)}\mu_1 dt + S_t^{(1)} \sigma_1 dX_t^{(1)}
+$$
+$$
+dS_t^{(2)} = S_t^{(2)}\mu_2 dt + S_t^{(2)} \sigma_1 dX_t^{(2)}
+$$
+W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania pojedynczego geometrycznego ruchu Browna.
+
+```{r, echo=FALSE}
+# Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
+# realizacje skorelowanych geometrycznych ruchów Browna
+# W pojedynczej kolumnie pojedyncza realizacji pełnej ścieżki; pojedynczy wiersz
+# zawiera wartość ścieżki w danej chwili okresu
+
+# S01 - wartość początkowa, mu1 - dryf (roczny), sigma1 - zmienność (roczna)
+# dla jednego z symulowanych geometrycznych ruchów Browna
+# S02 - wartość początkowa, mu2 - dryf (roczny), sigma2 - zmienność (roczna),
+# dla drugiego z symulowanych geometrycznych ruchów Browna
+# p - wspolczynnik korelacji symulowanych geometrycznych ruchow Browna
+# t - okres, długość ścieżki (w latach), n - liczba 'kroków', tj. podział okresu na części,
+# M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
+correlated_gbm_simulation <- function(S01, mu1, sigma1, S02, mu2, sigma2, p, t, n, M) {
+  
+  dt <- t / n
+  
+  brownian_increments_for_first_asset <- matrix(rnorm(M * n, mean = 0, sd = sqrt(dt)), nrow = M, ncol = n)
+  Z <- matrix(rnorm(M * n, mean = 0, sd <- sqrt(dt)), nrow = M, ncol = n)
+  brownian_increments_for_second_asset <- p * brownian_increments_for_first_asset + (1 - p^2)^(1/2) * Z
+  
+  brownian_increments_for_first_asset_transformed <- cbind(rep(1, M), 1 + mu1 * dt + sigma1 * brownian_increments_for_first_asset)
+  brownian_increments_for_second_asset_transformed <- cbind(rep(1, M), 1 + mu2 * dt + sigma2 * brownian_increments_for_second_asset)
+  
+  simulated_price_paths_for_first_asset <- S01 * t(apply(brownian_increments_for_first_asset_transformed, 1, cumprod))
+  simulated_price_paths_for_second_asset <- S02 * t(apply(brownian_increments_for_second_asset_transformed, 1, cumprod))
+  
+  return(list(t(simulated_price_paths_for_first_asset), t(simulated_price_paths_for_second_asset)))
+}
+```
+
+```{r, echo=FALSE}
+# Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
+# ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
+# mozemy pozniej usunac)
+kghm_data <- read_csv('kgh_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+kghm_data <- kghm_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+kghm_data$Zwrot[1] <- 0
+
+wig_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+
+wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
+kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
+```
+
+
+```{r, echo=FALSE}
+# Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
+# nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
+# to wypadałoby zamienić je na ggplota
+x1 = correlated_gbm_simulation(wigS0, drift_vol_estimates[1, 1], drift_vol_estimates[2, 1],
+                              kghmS0, mean(kghm_2021_zwroty)*length(kghm_2021_zwroty), sd(kghm_2021_zwroty)*sqrt(length(kghm_2021_zwroty)),
+                              cor(wig_2021_zwroty, kghm_2021_zwroty), 1, 250, 1)
+
+plot(1:251, x1[[1]], type='l', col="blue", xlab = '', ylab='', main = 'Symulacja (metodą standardową) notowań WIG20 i KGHM jako \n przykład dwóch skorelowanych geometrycznych ruchów Browna')
+par(new=TRUE)
+plot(1:251, x1[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
+axis(side=4)
+
+```
+
+
+# Symulacje metodą bootstrap
+
+Symulacje metodą bootstrap przeprowadzamy analogicznie do przypadku bootstrapowego symulowania pojedynczego geometrycznego ruchu Browna, z drobną zmianą, która umożliwia uchwycenie trendu (skorelowania) w symulacji: mając dwa zbiory indeksowanych zwrotów:
+$$
+R^{(1)} = \{R_i^{(1)} = \frac{S_{i}^{(1)} - S_{i - 1}^{(1)}}{S_{i - 1}^{(1)}} : i \in I \}
+$$
+$$
+R^{(2)} = \{R_i^{(2)} = \frac{S_{i}^{(2)} - S_{i - 1}^{(2)}}{S_{i - 1}^{(2)}} : i \in I \}
+$$
+odpowiednio aktywów $S^{(1)}$ i $S^{(2)}$, losujemy ciąg indeksów $(i_1, ..., i_n)$ ze zbioru $I$, a następnie wyznaczamy wartości $S_t^{(1)}$ i $S_t^{(2)}$ iteratywnie:
+$$
+S_{t_n}^{(1)} = S_{0}^{(1)}(1 + R_{i_{1}}^{(1)})(1 + R_{i_{2}}^{(1)})...(1 + R_{i_{n}}^{(1)})
+$$
+$$
+S_{t_n}^{(2)} = S_{0}^{(2)}(1 + R_{i_{1}}^{(2)})(1 + R_{i_{2}}^{(2)})...(1 + R_{i_{n}}^{(2)}).
+$$
+Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane (ponieważ $S^{(1)}$ i $S^{(2)}$ są ze sobą skorelowane).
+
+```{r, echo=FALSE}
+correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2, n, M) {
+  
+  if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
+  
+  N = length(returns_set1)
+
+  simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
+  simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
+
+  for (i in 1:M) {
+    random_indexes = matrix(sample(1:N, size = M*n, replace = TRUE), nrow = M, ncol = n)
+    
+    sampled_increments_for_first_asset = returns_set1[random_indexes]
+    sampled_increments_for_second_asset = returns_set2[random_indexes]
+    
+    simulated_price_paths_for_first_asset[i, ] = c(1, 1 + sampled_increments_for_first_asset)
+    simulated_price_paths_for_second_asset[i, ] = c(1, 1 + sampled_increments_for_second_asset)
+  }
+  
+  simulated_price_paths_for_first_asset = S01 * t(apply(simulated_price_paths_for_first_asset, 1, cumprod))
+  simulated_price_paths_for_second_asset = S02 * t(apply(simulated_price_paths_for_second_asset, 1, cumprod))
+
+  return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
+}
+```
+
+```{r, echo=FALSE}
+# Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
+# nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
+# to wypadałoby zamienić je na ggplota
+x = correlated_bootstrap_simulation(wigS0, kghmS0, wig_2021_zwroty, kghm_2021_zwroty, 250, 1)
+
+plot(1:251, x[[1]], type='l', col="blue", xlab = '', ylab='', main = 'Symulacja (metodą bootstrapową) notowań WIG20 i KGHM jako \n przykład dwóch skorelowanych geometrycznych ruchów Browna')
+par(new=TRUE)
+plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
+axis(side=4)
+```
+
+
 
 
