@@ -3,8 +3,11 @@ title: "Delta i gamma hedging"
 author: "Tomasz Kąkol, Mikołaj Pamuła, Jakub Żuk"
 date: "2026-03-07"
 output:
+  pdf_document:
+      toc: true
   html_document:
     df_print: paged
+toc-title: Spis treści
 ---
 
 ```{r setup, include=FALSE}
@@ -15,10 +18,15 @@ library(patchwork)
 library(knitr)
 ```
 
+\newpage
+
 # Wstęp
 
 (tutaj napiszemy wstęp)
 
+### Notacja
+
+Ze względu na powtarzalność wielu wyrażeń, zarówno słownych jak i matematycznych, poniżej przedstawiamy przyjęte oznaczenia, aby uniknąć niepotrzebnych powtórzeń: wartość $i$-tego aktywa w chwili $t_0$ oznaczamy przez $S_{t_0}^{(i)}$ - często dla prostoty aktywo utożsamiamy z funkcją jego wartości $S_t^{(i)}$, a w miejscach gdzie rozważamy wyłącznie jedno aktywo pomijamy indeks $i$. Dla $i$-tego aktywa, zwrot z $j$-tego dnia oznaczamy przez $R_{j}^{(i)}$, gdzie najczęściej (w przeciwnym wypadku będzie to wyraźnie zaznaczone) korzystamy ze standardowego wzoru: $(S_{j}^{(i)} - S_{j - 1}^{(i)})/(S_{j - 1}^{(i)})$ (w przypadku zwrotów również pomijamy indeks $i$ w miejsach gdzie nie tworzy to niejasności). Dryf (roczny) oraz zmienność (roczną) charakteryzujące geometrycznych ruch Browna (model cen aktywów) oznaczamy przez odpowiednio $\mu$ i $\sigma$.
 
 ## WIG20
 
@@ -95,18 +103,18 @@ kable(drift_vol_estimates, digits = 4)
 Do modelowania wyceny indeksu WIG20 posłużymy się geometrycznym ruchem Browna zgodnie z modelem Blacka-Scholesa. 
 
 Symulację geometrycznego ruchu Browna opieramy na charakteryzującym go równaniu różniczkowym:
-$$dS_t = S_t\mu dt + S_t\sigma dW_t$$
-gdzie $dW_t$ jest procesem Wienera (ruchem Browna). Korzystamy z następujących przybliżeń:
+$$dS_t = S_t\mu dt + S_t\sigma dX_t$$
+gdzie $X_t$ jest procesem Wienera (ruchem Browna). Korzystamy z następujących przybliżeń:
 $$
-dS_{t_{n+1}} \approx S_{t_{n+1}} - S_{t_n}, \;\; dW_{t_{n+1}} \approx W_{t_{n+1}} - W_{t_n}, \;\; dt_{n+1} \approx t_{n_{n+1}} - t_n
+dS_{t_{n+1}} \approx S_{t_{n+1}} - S_{t_n}, \;\; dX_{t_{n+1}} \approx X_{t_{n+1}} - X_{t_n}, \;\; dt_{n+1} \approx t_{n_{n+1}} - t_n
 $$
 czyli
 $$
-S_{t_{n+1}} \approx S_{t_n}(1 + \mu(t_{n_{n+1}} - t_n)  + \sigma (W_{t_{n+1}} - W_{t_n})), \;\;\;
+S_{t_{n+1}} \approx S_{t_n}(1 + \mu(t_{n_{n+1}} - t_n)  + \sigma (X_{t_{n+1}} - X_{t_n})), \;\;\;
 $$
 następnie, korzystając z niezależności przyrostów ruchu Browna i faktu, że
 $$
-W_{t_{n+1}} - W_{t_n} \sim N(0, t_{n+1} - t_n)
+X_{t_{n+1}} - X_{t_n} \sim N(0, t_{n+1} - t_n)
 $$
 jesteśmy w stanie wyznaczyć przybliżoną wartość pewnej realizacji $S_t$ dla dowolnego $t \in T$: dyskretyzując zbiór $T$ na $n$ części ($\frac{T}{n}$) oraz losując w sposób niezależny $n$ liczb z odpowiedniego rozkładu normalnego, stosujemy proste operacje arytmetyczne i otrzymujemy wynik.
 
@@ -901,7 +909,7 @@ plot_call | plot_put
 
 # Symulacje metodą standardową
 
-Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$, których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
+Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$ (w naszym przypadku notowania pewnych aktywów), których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
 $$
 X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}
 $$
@@ -913,6 +921,13 @@ $$
 dS_t^{(2)} = S_t^{(2)}\mu_2 dt + S_t^{(2)} \sigma_1 dX_t^{(2)}
 $$
 W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania pojedynczego geometrycznego ruchu Browna.
+
+Współczynnik korelacji $\rho$ między notowaniami aktywów $S_t^{(1)}$ i $S_t^{(2)}$, wymagany do przeprowadzenia symulacji, szacujemy korzystając ze standardowego próbkowego (obciążonego) estymatora:
+$$
+\hat{\rho} = \frac{\sum_{i = 1}^n (R_i^{(1)} - \overline{R}^{(1)})(R_i^{(2)} - \overline{R}^{(2)})}{\sqrt{\sum_{i = 1}^n (R_i^{(1)} - \overline{R}^{(1)})^2}\sqrt{\sum_{i = 1}^n (R_i^{(2)} - \overline{R}^{(2)})^2}}
+$$
+gdzie $R_i^{(1)}$ i $R_i^{(2)}$ są uprzednio zdefiniowanymi zwrotami odpowiednio aktywa $S_t^{(1)}$ i $S_t^{(2)}$.
+
 
 ```{r, echo=FALSE}
 # Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
@@ -1005,23 +1020,19 @@ correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2
   if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
   
   N = length(returns_set1)
-
+  
   simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
   simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
-
+  
   for (i in 1:M) {
-    random_indexes = matrix(sample(1:N, size = M*n, replace = TRUE), nrow = M, ncol = n)
-    
-    sampled_increments_for_first_asset = returns_set1[random_indexes]
+    random_indexes = sample(1:N, size = n, replace = TRUE)  # losujemy te same indeksy
+    sampled_increments_for_first_asset  = returns_set1[random_indexes]
     sampled_increments_for_second_asset = returns_set2[random_indexes]
     
-    simulated_price_paths_for_first_asset[i, ] = c(1, 1 + sampled_increments_for_first_asset)
-    simulated_price_paths_for_second_asset[i, ] = c(1, 1 + sampled_increments_for_second_asset)
+    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
+    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
   }
   
-  simulated_price_paths_for_first_asset = S01 * t(apply(simulated_price_paths_for_first_asset, 1, cumprod))
-  simulated_price_paths_for_second_asset = S02 * t(apply(simulated_price_paths_for_second_asset, 1, cumprod))
-
   return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
 }
 ```
@@ -1038,35 +1049,4 @@ plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
 axis(side=4)
 ```
 
-#Moja propozycja. Nie jestem jej pewny, ale wydaje mi się lekko bardziej sensowna
 
-#Nie powinniśmy losować tych samych indeksów w tym samym kroku, by była rzeczywista para zwrotów z historii?
-
-W ten sposób możemy zaobserwować rzeczywistą korelację historyczną pomiędzy cenami w tych samych okresach, ponieważ losujemy ten sam moment, przez co lepiej możemy zoabserwować, co się działo. Bo to, że są skorelowane, nie znaczy że spadek ceny KGHM implikuje spadek WIG20 i w drugą stronę. 
-
-```{r, echo=FALSE}
-correlated_bootstrap_simulation2 <- function(S01, S02, returns_set1, returns_set2, n, M) {
-  if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
-  N = length(returns_set1)
-  
-  simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
-  simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
-  
-  for (i in 1:M) {
-    random_indexes = sample(1:N, size = n, replace = TRUE)  # losujemy te same indeksy
-    sampled_increments_for_first_asset  = returns_set1[random_indexes]
-    sampled_increments_for_second_asset = returns_set2[random_indexes]
-    
-    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
-    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
-  }
-  
-  return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
-}
-x = correlated_bootstrap_simulation2(wigS0, kghmS0, wig_2021_zwroty, kghm_2021_zwroty, 250, 1)
-
-plot(1:251, x[[1]], type='l', col="blue", xlab = '', ylab='', main = 'Symulacja (metodą bootstrapową) notowań WIG20 i KGHM jako \n przykład dwóch skorelowanych geometrycznych ruchów Browna')
-par(new=TRUE)
-plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
-axis(side=4)
-```
