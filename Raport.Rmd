@@ -252,7 +252,6 @@ legend_plot <- ggplot() +
 
 
 
-
 ### Histogramy historycznych zwrotów a symulowanych metodą standardową
 
 Poniżej przedstawiamy porównanie histogramów zwrotów historycznych z roku 2022 indeksu WIG20, z histogramem zwrotów z wygenerowanych trajektorii.
@@ -850,15 +849,131 @@ wrzesień, grudzień)
 
 * dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii. 
 
+* ceny Strike co 50 punktów (np. 2000, 2050, 2100, $\dots$)
+
 GPW określa ryzyko handlu opcjami na najwyższym możliwym poziomie, głównie ze względu na potencjalną niską płynność instrumentu i brak możliwości zamknięcia pozycji przed terminem wygaśnięcia. 
 
 ### Strategia LONG CALL
 
 (tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
 
-### Strategoa SHORT CALL
+```{r, echo=FALSE}
+# Parametry
+K <- 100      # strike
+premia <- 10  # koszt zakupu opcji
+S_range <- seq(50, 150, by = 1)
+
+# Zysk/strata z long call
+df <- data.frame(S = S_range) %>%
+  mutate(
+    Zysk = pmax(S - K, 0) - premia
+  )
+
+# Punkt break-even
+break_even <- K + premia
+
+ggplot(df, aes(x = S, y = Zysk)) +
+  # Obszar zysku (zielony) i straty (czerwony)
+  geom_area(data = df %>% filter(Zysk >= 0), 
+            fill = "#2ECC71", alpha = 0.3) +
+  geom_area(data = df %>% filter(Zysk <= 0), 
+            fill = "#E74C3C", alpha = 0.3) +
+  # Linia payoff
+  geom_line(color = "#2980B9", linewidth = 1.5) +
+  # Linie pomocnicze
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
+  # Punkty kluczowe
+  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
+  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
+  # Etykiety punktów
+  annotate("text", x = K, y = -premia - 3, 
+           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
+  annotate("text", x = break_even + 8, y = 2, 
+           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
+  annotate("text", x = K - 5, y = 15, 
+           label = paste0("K = ", K), color = "gray40", size = 4) +
+  # Tytuł i etykiety
+  labs(
+    title = "Strategia Long Call",
+    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
+    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
+    y = "Zysk / Strata"
+  ) +
+  # Styl
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  # Skala Y
+  scale_y_continuous(breaks = seq(-20, 50, by = 10))
+```
+
+### Strategia LONG PUT
 
 (tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
+
+```{r, echo=FALSE}
+# Parametry
+K <- 100      # strike
+premia <- 10  # koszt zakupu opcji
+S_range <- seq(50, 150, by = 1)
+
+# Zysk/strata z long put
+df <- data.frame(S = S_range) %>%
+  mutate(
+    Zysk = pmax(K - S, 0) - premia
+  )
+
+# Punkt break-even
+break_even <- K - premia
+
+ggplot(df, aes(x = S, y = Zysk)) +
+  # Obszar zysku (zielony) i straty (czerwony)
+  geom_area(data = df %>% filter(Zysk >= 0), 
+            fill = "#2ECC71", alpha = 0.3) +
+  geom_area(data = df %>% filter(Zysk <= 0), 
+            fill = "#E74C3C", alpha = 0.3) +
+  # Linia payoff
+  geom_line(color = "#9B59B6", linewidth = 1.5) +
+  # Linie pomocnicze
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
+  # Punkty kluczowe
+  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
+  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
+  # Etykiety punktów
+  annotate("text", x = K, y = -premia - 3, 
+           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
+  annotate("text", x = break_even - 8, y = 2, 
+           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
+  annotate("text", x = K + 5, y = 15, 
+           label = paste0("K = ", K), color = "gray40", size = 4) +
+  # Maksymalny zysk
+  annotate("text", x = 55, y = K - premia - 50 - 5, 
+           label = paste0("Max zysk = ", K - premia, "\n(gdy S = 0)"), 
+           color = "#27AE60", size = 4, hjust = 0) +
+  # Tytuł i etykiety
+  labs(
+    title = "Strategia Long Put",
+    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
+    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
+    y = "Zysk / Strata"
+  ) +
+  # Styl
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  # Skala Y
+  scale_y_continuous(breaks = seq(-20, 100, by = 10))
+```
 
 ### Payoff
 
@@ -904,6 +1019,103 @@ plot_put <- ggplot(df, aes(x = S, y = PUT)) +
 # Obok siebie
 plot_call | plot_put
 ```
+
+### Histogram payoffów opcji zapadających w grudniu 2022
+
+```{r, echo=FALSE}
+strikes <- c(1800, 1900, 2000, 2100)
+mnoznik <- 10
+
+# Wartości końcowe z symulacji
+ST_values <- simulations[[1]][nrow(simulations[[1]]), ]
+
+plot_payoff_hist <- function(ST_values, K, type = "CALL") {
+  if (type == "CALL") {
+    payoffs <- pmax(ST_values - K, 0) * mnoznik
+    fill_col <- "#3498DB"
+    title_col <- "#2980B9"
+  } else {
+    payoffs <- pmax(K - ST_values, 0) * mnoznik
+    fill_col <- "#E74C3C"
+    title_col <- "#C0392B"
+  }
+  
+  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
+    geom_histogram(bins = 25, fill = fill_col, color = "white", alpha = 0.8) +
+    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
+    labs(
+      title = paste0(type, " (K=", K, ")"),
+      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
+                       round(mean(payoffs > 0) * 100, 0), "%"),
+      x = "Payoff (PLN)", y = ""
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, color = title_col),
+      plot.subtitle = element_text(hjust = 0.5, size = 8)
+    )
+}
+
+# Siatka CALL
+c1 <- plot_payoff_hist(ST_values, strikes[1], "CALL")
+c2 <- plot_payoff_hist(ST_values, strikes[2], "CALL")
+c3 <- plot_payoff_hist(ST_values, strikes[3], "CALL")
+c4 <- plot_payoff_hist(ST_values, strikes[4], "CALL")
+
+(c1 | c2) / (c3 | c4) +
+  plot_annotation(
+    title = "Rozkład payoffów opcji CALL - grudzień 2022",
+    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
+    )
+  )
+```
+
+```{r, echo=FALSE}
+strikes <- c(3200, 3300, 3400, 3500)
+mnoznik <- 10
+
+
+# Funkcja do histogramu PUT
+plot_put_hist <- function(ST_values, K) {
+  payoffs <- pmax(K - ST_values, 0) * mnoznik
+  
+  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
+    geom_histogram(bins = 25, fill = "#E74C3C", color = "white", alpha = 0.8) +
+    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
+    labs(
+      title = paste0("PUT (K=", K, ")"),
+      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
+                       round(mean(payoffs > 0) * 100, 0), "%"),
+      x = "Payoff (PLN)", y = ""
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, color = "#C0392B"),
+      plot.subtitle = element_text(hjust = 0.5, size = 8)
+    )
+}
+
+# Siatka PUT
+p1 <- plot_put_hist(ST_values, strikes[1])
+p2 <- plot_put_hist(ST_values, strikes[2])
+p3 <- plot_put_hist(ST_values, strikes[3])
+p4 <- plot_put_hist(ST_values, strikes[4])
+
+(p1 | p2) / (p3 | p4) +
+  plot_annotation(
+    title = "Rozkład payoffów opcji PUT - grudzień 2022",
+    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
+    )
+  )
+```
+
+
 
 ## Symulacje skorelowanych geometrycznych ruchów Browna
 
