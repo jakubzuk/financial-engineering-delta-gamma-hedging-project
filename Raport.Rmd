@@ -3,11 +3,8 @@ title: "Delta i gamma hedging"
 author: "Tomasz Kąkol, Mikołaj Pamuła, Jakub Żuk"
 date: "2026-03-07"
 output:
-  pdf_document:
-      toc: true
   html_document:
     df_print: paged
-toc-title: Spis treści
 ---
 
 ```{r setup, include=FALSE}
@@ -18,15 +15,10 @@ library(patchwork)
 library(knitr)
 ```
 
-\newpage
-
 # Wstęp
 
-(tutaj napiszemy wstęp)
+Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w ramach przedmiotu "Inżynieria finansowa 1". Projekt będzie obracał się w tematyce zabezpieczania opcji waniliowych i składał się z trzech części: 0 (rozgrzewkowa), A oraz B. W części 0 będziemy precyzować niezbędne parametry potrzebne w dalszych częściach (m.in. parametry modelu Blacka-Scholesa), takie jak trajektorie ruchu Browna czy symulacje na podstawie Bootstrapingu. Druga część, tj. część A, będzie opisywała działanie delta hedgingu pojdeynczej opcji na WIG20, gdzie będziemy badać skuteczność naszych naszych parametrów, a w ostatniej części, tj. części B, rozważymy zabezpieczanie poprzez tzw. delta hedging.
 
-### Notacja
-
-Ze względu na powtarzalność wielu wyrażeń, zarówno słownych jak i matematycznych, poniżej przedstawiamy przyjęte oznaczenia, aby uniknąć niepotrzebnych powtórzeń: wartość $i$-tego aktywa w chwili $t_0$ oznaczamy przez $S_{t_0}^{(i)}$ - często dla prostoty aktywo utożsamiamy z funkcją jego wartości $S_t^{(i)}$, a w miejscach gdzie rozważamy wyłącznie jedno aktywo pomijamy indeks $i$. Dla $i$-tego aktywa, zwrot z $j$-tego dnia oznaczamy przez $R_{j}^{(i)}$, gdzie najczęściej (w przeciwnym wypadku będzie to wyraźnie zaznaczone) korzystamy ze standardowego wzoru: $(S_{j}^{(i)} - S_{j - 1}^{(i)})/(S_{j - 1}^{(i)})$ (w przypadku zwrotów również pomijamy indeks $i$ w miejsach gdzie nie tworzy to niejasności). Dryf (roczny) oraz zmienność (roczną) charakteryzujące geometrycznych ruch Browna (model cen aktywów) oznaczamy przez odpowiednio $\mu$ i $\sigma$.
 
 ## WIG20
 
@@ -103,18 +95,18 @@ kable(drift_vol_estimates, digits = 4)
 Do modelowania wyceny indeksu WIG20 posłużymy się geometrycznym ruchem Browna zgodnie z modelem Blacka-Scholesa. 
 
 Symulację geometrycznego ruchu Browna opieramy na charakteryzującym go równaniu różniczkowym:
-$$dS_t = S_t\mu dt + S_t\sigma dX_t$$
-gdzie $X_t$ jest procesem Wienera (ruchem Browna). Korzystamy z następujących przybliżeń:
+$$dS_t = S_t\mu dt + S_t\sigma dW_t$$
+gdzie $dW_t$ jest procesem Wienera (ruchem Browna). Korzystamy z następujących przybliżeń:
 $$
-dS_{t_{n+1}} \approx S_{t_{n+1}} - S_{t_n}, \;\; dX_{t_{n+1}} \approx X_{t_{n+1}} - X_{t_n}, \;\; dt_{n+1} \approx t_{n_{n+1}} - t_n
+dS_{t_{n+1}} \approx S_{t_{n+1}} - S_{t_n}, \;\; dW_{t_{n+1}} \approx W_{t_{n+1}} - W_{t_n}, \;\; dt_{n+1} \approx t_{n_{n+1}} - t_n
 $$
 czyli
 $$
-S_{t_{n+1}} \approx S_{t_n}(1 + \mu(t_{n_{n+1}} - t_n)  + \sigma (X_{t_{n+1}} - X_{t_n})), \;\;\;
+S_{t_{n+1}} \approx S_{t_n}(1 + \mu(t_{n_{n+1}} - t_n)  + \sigma (W_{t_{n+1}} - W_{t_n})), \;\;\;
 $$
 następnie, korzystając z niezależności przyrostów ruchu Browna i faktu, że
 $$
-X_{t_{n+1}} - X_{t_n} \sim N(0, t_{n+1} - t_n)
+W_{t_{n+1}} - W_{t_n} \sim N(0, t_{n+1} - t_n)
 $$
 jesteśmy w stanie wyznaczyć przybliżoną wartość pewnej realizacji $S_t$ dla dowolnego $t \in T$: dyskretyzując zbiór $T$ na $n$ części ($\frac{T}{n}$) oraz losując w sposób niezależny $n$ liczb z odpowiedniego rozkładu normalnego, stosujemy proste operacje arytmetyczne i otrzymujemy wynik.
 
@@ -249,6 +241,7 @@ legend_plot <- ggplot() +
     )
   )
 ```
+
 
 
 
@@ -849,131 +842,15 @@ wrzesień, grudzień)
 
 * dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii. 
 
-* ceny Strike co 50 punktów (np. 2000, 2050, 2100, $\dots$)
-
 GPW określa ryzyko handlu opcjami na najwyższym możliwym poziomie, głównie ze względu na potencjalną niską płynność instrumentu i brak możliwości zamknięcia pozycji przed terminem wygaśnięcia. 
 
 ### Strategia LONG CALL
 
 (tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
 
-```{r, echo=FALSE}
-# Parametry
-K <- 100      # strike
-premia <- 10  # koszt zakupu opcji
-S_range <- seq(50, 150, by = 1)
-
-# Zysk/strata z long call
-df <- data.frame(S = S_range) %>%
-  mutate(
-    Zysk = pmax(S - K, 0) - premia
-  )
-
-# Punkt break-even
-break_even <- K + premia
-
-ggplot(df, aes(x = S, y = Zysk)) +
-  # Obszar zysku (zielony) i straty (czerwony)
-  geom_area(data = df %>% filter(Zysk >= 0), 
-            fill = "#2ECC71", alpha = 0.3) +
-  geom_area(data = df %>% filter(Zysk <= 0), 
-            fill = "#E74C3C", alpha = 0.3) +
-  # Linia payoff
-  geom_line(color = "#2980B9", linewidth = 1.5) +
-  # Linie pomocnicze
-  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
-  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
-  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
-  # Punkty kluczowe
-  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
-  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
-  # Etykiety punktów
-  annotate("text", x = K, y = -premia - 3, 
-           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
-  annotate("text", x = break_even + 8, y = 2, 
-           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
-  annotate("text", x = K - 5, y = 15, 
-           label = paste0("K = ", K), color = "gray40", size = 4) +
-  # Tytuł i etykiety
-  labs(
-    title = "Strategia Long Call",
-    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
-    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
-    y = "Zysk / Strata"
-  ) +
-  # Styl
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
-    panel.grid.minor = element_blank()
-  ) +
-  # Skala Y
-  scale_y_continuous(breaks = seq(-20, 50, by = 10))
-```
-
-### Strategia LONG PUT
+### Strategoa SHORT CALL
 
 (tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
-
-```{r, echo=FALSE}
-# Parametry
-K <- 100      # strike
-premia <- 10  # koszt zakupu opcji
-S_range <- seq(50, 150, by = 1)
-
-# Zysk/strata z long put
-df <- data.frame(S = S_range) %>%
-  mutate(
-    Zysk = pmax(K - S, 0) - premia
-  )
-
-# Punkt break-even
-break_even <- K - premia
-
-ggplot(df, aes(x = S, y = Zysk)) +
-  # Obszar zysku (zielony) i straty (czerwony)
-  geom_area(data = df %>% filter(Zysk >= 0), 
-            fill = "#2ECC71", alpha = 0.3) +
-  geom_area(data = df %>% filter(Zysk <= 0), 
-            fill = "#E74C3C", alpha = 0.3) +
-  # Linia payoff
-  geom_line(color = "#9B59B6", linewidth = 1.5) +
-  # Linie pomocnicze
-  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
-  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
-  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
-  # Punkty kluczowe
-  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
-  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
-  # Etykiety punktów
-  annotate("text", x = K, y = -premia - 3, 
-           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
-  annotate("text", x = break_even - 8, y = 2, 
-           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
-  annotate("text", x = K + 5, y = 15, 
-           label = paste0("K = ", K), color = "gray40", size = 4) +
-  # Maksymalny zysk
-  annotate("text", x = 55, y = K - premia - 50 - 5, 
-           label = paste0("Max zysk = ", K - premia, "\n(gdy S = 0)"), 
-           color = "#27AE60", size = 4, hjust = 0) +
-  # Tytuł i etykiety
-  labs(
-    title = "Strategia Long Put",
-    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
-    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
-    y = "Zysk / Strata"
-  ) +
-  # Styl
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
-    panel.grid.minor = element_blank()
-  ) +
-  # Skala Y
-  scale_y_continuous(breaks = seq(-20, 100, by = 10))
-```
 
 ### Payoff
 
@@ -1020,108 +897,11 @@ plot_put <- ggplot(df, aes(x = S, y = PUT)) +
 plot_call | plot_put
 ```
 
-### Histogram payoffów opcji zapadających w grudniu 2022
-
-```{r, echo=FALSE}
-strikes <- c(1800, 1900, 2000, 2100)
-mnoznik <- 10
-
-# Wartości końcowe z symulacji
-ST_values <- simulations[[1]][nrow(simulations[[1]]), ]
-
-plot_payoff_hist <- function(ST_values, K, type = "CALL") {
-  if (type == "CALL") {
-    payoffs <- pmax(ST_values - K, 0) * mnoznik
-    fill_col <- "#3498DB"
-    title_col <- "#2980B9"
-  } else {
-    payoffs <- pmax(K - ST_values, 0) * mnoznik
-    fill_col <- "#E74C3C"
-    title_col <- "#C0392B"
-  }
-  
-  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
-    geom_histogram(bins = 25, fill = fill_col, color = "white", alpha = 0.8) +
-    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
-    labs(
-      title = paste0(type, " (K=", K, ")"),
-      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
-                       round(mean(payoffs > 0) * 100, 0), "%"),
-      x = "Payoff (PLN)", y = ""
-    ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5, color = title_col),
-      plot.subtitle = element_text(hjust = 0.5, size = 8)
-    )
-}
-
-# Siatka CALL
-c1 <- plot_payoff_hist(ST_values, strikes[1], "CALL")
-c2 <- plot_payoff_hist(ST_values, strikes[2], "CALL")
-c3 <- plot_payoff_hist(ST_values, strikes[3], "CALL")
-c4 <- plot_payoff_hist(ST_values, strikes[4], "CALL")
-
-(c1 | c2) / (c3 | c4) +
-  plot_annotation(
-    title = "Rozkład payoffów opcji CALL - grudzień 2022",
-    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
-    theme = theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
-    )
-  )
-```
-
-```{r, echo=FALSE}
-strikes <- c(3200, 3300, 3400, 3500)
-mnoznik <- 10
-
-
-# Funkcja do histogramu PUT
-plot_put_hist <- function(ST_values, K) {
-  payoffs <- pmax(K - ST_values, 0) * mnoznik
-  
-  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
-    geom_histogram(bins = 25, fill = "#E74C3C", color = "white", alpha = 0.8) +
-    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
-    labs(
-      title = paste0("PUT (K=", K, ")"),
-      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
-                       round(mean(payoffs > 0) * 100, 0), "%"),
-      x = "Payoff (PLN)", y = ""
-    ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(face = "bold", hjust = 0.5, color = "#C0392B"),
-      plot.subtitle = element_text(hjust = 0.5, size = 8)
-    )
-}
-
-# Siatka PUT
-p1 <- plot_put_hist(ST_values, strikes[1])
-p2 <- plot_put_hist(ST_values, strikes[2])
-p3 <- plot_put_hist(ST_values, strikes[3])
-p4 <- plot_put_hist(ST_values, strikes[4])
-
-(p1 | p2) / (p3 | p4) +
-  plot_annotation(
-    title = "Rozkład payoffów opcji PUT - grudzień 2022",
-    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
-    theme = theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
-    )
-  )
-```
-
-
-
 ## Symulacje skorelowanych geometrycznych ruchów Browna
 
 # Symulacje metodą standardową
 
-Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$ (w naszym przypadku notowania pewnych aktywów), których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
+Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$, których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
 $$
 X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}
 $$
@@ -1133,13 +913,6 @@ $$
 dS_t^{(2)} = S_t^{(2)}\mu_2 dt + S_t^{(2)} \sigma_1 dX_t^{(2)}
 $$
 W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania pojedynczego geometrycznego ruchu Browna.
-
-Współczynnik korelacji $\rho$ między notowaniami aktywów $S_t^{(1)}$ i $S_t^{(2)}$, wymagany do przeprowadzenia symulacji, szacujemy korzystając ze standardowego próbkowego (obciążonego) estymatora:
-$$
-\hat{\rho} = \frac{\sum_{i = 1}^n (R_i^{(1)} - \overline{R}^{(1)})(R_i^{(2)} - \overline{R}^{(2)})}{\sqrt{\sum_{i = 1}^n (R_i^{(1)} - \overline{R}^{(1)})^2}\sqrt{\sum_{i = 1}^n (R_i^{(2)} - \overline{R}^{(2)})^2}}
-$$
-gdzie $R_i^{(1)}$ i $R_i^{(2)}$ są uprzednio zdefiniowanymi zwrotami odpowiednio aktywa $S_t^{(1)}$ i $S_t^{(2)}$.
-
 
 ```{r, echo=FALSE}
 # Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
@@ -1232,19 +1005,23 @@ correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2
   if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
   
   N = length(returns_set1)
-  
+
   simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
   simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
-  
+
   for (i in 1:M) {
-    random_indexes = sample(1:N, size = n, replace = TRUE)  # losujemy te same indeksy
-    sampled_increments_for_first_asset  = returns_set1[random_indexes]
+    random_indexes = matrix(sample(1:N, size = M*n, replace = TRUE), nrow = M, ncol = n)
+    
+    sampled_increments_for_first_asset = returns_set1[random_indexes]
     sampled_increments_for_second_asset = returns_set2[random_indexes]
     
-    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
-    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
+    simulated_price_paths_for_first_asset[i, ] = c(1, 1 + sampled_increments_for_first_asset)
+    simulated_price_paths_for_second_asset[i, ] = c(1, 1 + sampled_increments_for_second_asset)
   }
   
+  simulated_price_paths_for_first_asset = S01 * t(apply(simulated_price_paths_for_first_asset, 1, cumprod))
+  simulated_price_paths_for_second_asset = S02 * t(apply(simulated_price_paths_for_second_asset, 1, cumprod))
+
   return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
 }
 ```
@@ -1261,4 +1038,53 @@ plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
 axis(side=4)
 ```
 
+#Moja propozycja. Nie jestem jej pewny, ale wydaje mi się lekko bardziej sensowna
 
+#Nie powinniśmy losować tych samych indeksów w tym samym kroku, by była rzeczywista para zwrotów z historii?
+
+W ten sposób możemy zaobserwować rzeczywistą korelację historyczną pomiędzy cenami w tych samych okresach, ponieważ losujemy ten sam moment, przez co lepiej możemy zoabserwować, co się działo. Bo to, że są skorelowane, nie znaczy że spadek ceny KGHM implikuje spadek WIG20 i w drugą stronę. 
+
+```{r, echo=FALSE}
+correlated_bootstrap_simulation2 <- function(S01, S02, returns_set1, returns_set2, n, M) {
+  if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
+  N = length(returns_set1)
+  
+  simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
+  simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
+  
+  for (i in 1:M) {
+    random_indexes = sample(1:N, size = n, replace = TRUE)  # losujemy te same indeksy
+    sampled_increments_for_first_asset  = returns_set1[random_indexes]
+    sampled_increments_for_second_asset = returns_set2[random_indexes]
+    
+    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
+    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
+  }
+  
+  return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
+}
+x = correlated_bootstrap_simulation2(wigS0, kghmS0, wig_2021_zwroty, kghm_2021_zwroty, 250, 1)
+
+plot(1:251, x[[1]], type='l', col="blue", xlab = '', ylab='', main = 'Symulacja (metodą bootstrapową) notowań WIG20 i KGHM jako \n przykład dwóch skorelowanych geometrycznych ruchów Browna')
+par(new=TRUE)
+plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
+axis(side=4)
+```
+
+# Część właściwa
+
+W tej części będziemy rozważać handel opcjami call i put na indeksie WIG20. Zwrócimy swoją uwagę głównie na opcje zapadające w grudniu 2022(???) i będziemy starać się zabezpieczać payoff środkami wolnymi od ryzyka, takimi jak wolna gotówka odłożona na jakiejś lokacie (lub w przypadku kapitału ujemnego długu). Do tego posłuży nam sposób delta hedging. Parametry użyte przez nas to będą odpowiednie parametry wyznaczone we wcześniejszej części. 
+
+## Część A
+W tej części zajmiemy się analizą histogramów rozkładu zysku i straty z hedgowania opcjami call i put na indeksie WIG20. Założymy, że dynamika aktywa bazowego będzie opisywana geometrycznym ruchem Browna z odpowiednimi parametrami wyznaczonymi we wcześniejszej części, a także że opcje wyceniamy zgodnie z modelem Blacka-Scholesa.
+
+Skrócony algorytm delta hedgingu wygląda następująco: 
+  1. W chwili startowej $t_0$ obliczamy deltę opcji $\delta_0 = \delta(t_0, S_0)$ i kupujemy $\delta_0$ akcji. Środki, które nam zostały, trafiają na lokatę z oprocentowaniem r (lub w przypadku ujemnego kapitału, są długiem z tym samym oprocentowaniem)
+  2. W następnych chwilach obliczamy nową deltę $\delta_i = delta(t_i, S_t_i)$, a następnie zmieniamy ilość akcji tak, by w chwili $t_i$ była ona równa ilości $\delta_t_i$
+  3. Wartość portfela jest w każdym momencie aktualizowana uwzględniając zmianę cen akcji oraz odsetki saldawolnego od ryzyka
+  4. W chwili wygaśnięcia opcji ($T_n = T$) końcowy zysk obliczamy jako wartość portfela zabezpieczającego pomniejszoną o payoff opcji
+  
+  
+  I ogólnie to znalazłem taki wzór w tej książce Wilmotta na V. Dla S <= E V = 0
+
+$$ V = S - E + rE \delta t \quad dla \quad S > E $$
