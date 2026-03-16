@@ -1377,11 +1377,16 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
     if (option_type == 'C') {return(S*pnorm(d1) - K*exp(-r*(t_total - t))*pnorm(d2))}
     else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
   }
- 
+  
   #   Funkcja, która wyznacza wartość delty opcji według wzoru Blacka-Scholesa 
   BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
     if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
     else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
+  }
+  
+  if ((n < 2) | (n > t*250) | ((!is.na(real_prices)) & (n > t*length(real_prices)))) {
+    message('n (częstość aktualizowania portfela) za niska lub za wysoka')
+    stop()
   }
   
   
@@ -1399,12 +1404,12 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
   #   Pętla wykonująca algorytm m razy
   for (j in 1:m) {
     
-    tstep = 0
-    dt = t_total/n
-    
     #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
-    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, n, 1))}
+    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, 250, 1))}
     else {price_path = real_prices}
+    
+    tstep = 0
+    dt = t/n
     
     #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
     if (is.na(option_premium)) {cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)}
@@ -1421,19 +1426,19 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
       #   Zwiększenie momentu czasowego
       tstep = tstep + dt
       #   Wyznaczamy nową deltę
-      deltas_matrix[i + 1, j] = BS_delta(price_path[i + 1], K, r, sigma, t, tstep, option_type)
+      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, sigma, t, tstep, option_type)
       #   Aktualizujemy stan środków finansowych: wcześniej posiadane środki zwiększamy o odsetki i odejmujemy
       #   różnicę między pieniędzmi wydanymi na nową deltę a tymi uzyskanymi ze sprzedaży starej
-      cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[i + 1]
+      cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1]
       
     }
     
     #   Wyznaczenie payoffu w zależności od typu opcji
-    if (option_type == 'C') {payoff = max(price_path[251] - K, 0)}
-    else {payoff = max(K - price_path[251], 0)}
+    if (option_type == 'C') {payoff = max(price_path[length(price_path)] - K, 0)}
+    else {payoff = max(K - price_path[length(price_path)], 0)}
     
     #   Stan (wartość) portfela w finalnej chwili
-    portfolio = cashs_matrix[n, j] * exp(r*dt) + deltas_matrix[n, j] * price_path[n + 1]
+    portfolio = cashs_matrix[n, j] * exp(r*(t - tstep)) + deltas_matrix[n, j] * price_path[length(price_path)]
     
     #   Wyznaczenie różnicy między wartością portfela a payoffem replikowanej opcji
     final_price_diffs[j] = portfolio - payoff
@@ -1445,15 +1450,177 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
 }
 ```
 
-```{r include, eval=FALSE, include=FALSE}
-#   Zostawiam ten chunk jakbyście chcieli zobaczyć ten histogram, który wysłalem na messengerze
-#   albo jakbyście chcieli sami coś tu się pobawić
-result = BS_delta_hedging_algorithm(2270, 0.1, 0.2, 0.05, 1, n, 10000, 2240, option_premium = NA, real_prices = NA, option_type = 'P')
-hist(result[[1]], freq = FALSE, bins = 30)
+```{r, echo = FALSE}
+mu = 0
+sigma = 0.2
+r = 0.05
+t = 1
+#M = 10000
+K = 1800
 
-ggplot(data, aes(x = result[[1]])) +  geom_histogram(aes(y =..density..), binwidth=3, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
-  ggtitle("") + stat_function(fun = dnorm, args = list(mean = mean(result[[1]]), sd = sd(result[[1]])))
+call_rehedging_data = list(
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]])
+)
+
+put_rehedging_data = list(
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]])
+)
 ```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
+call_plot1 = ggplot(call_rehedging_data[[1]], aes(x = c(call_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot2 = ggplot(call_rehedging_data[[2]], aes(x = c(call_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot3 = ggplot(call_rehedging_data[[3]], aes(x = c(call_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot4 = ggplot(call_rehedging_data[[4]], aes(x = c(call_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(call_plot1 | call_plot2) / (call_plot3 | call_plot4) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja CALL, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+
+call_plot1 = ggplot(call_rehedging_data[[1]], aes(x = c(call_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot2 = ggplot(call_rehedging_data[[2]], aes(x = c(call_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot3 = ggplot(call_rehedging_data[[3]], aes(x = c(call_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot4 = ggplot(call_rehedging_data[[4]], aes(x = c(call_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(call_plot1 | call_plot2) / (call_plot3 | call_plot4)  +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja CALL, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
+put_plot1 = ggplot(put_rehedging_data[[1]], aes(x = c(put_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot2 = ggplot(put_rehedging_data[[2]], aes(x = c(put_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot3 = ggplot(put_rehedging_data[[3]], aes(x = c(put_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(put_plot1 | put_plot2) / (put_plot3 | put_plot4) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja PUT, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+
+
+
+put_plot1 = ggplot(put_rehedging_data[[1]], aes(x = c(put_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot2 = ggplot(put_rehedging_data[[2]], aes(x = c(put_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot3 = ggplot(put_rehedging_data[[3]], aes(x = c(put_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(put_plot1 | put_plot2) / (put_plot3 | put_plot4) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja PUT, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+
+```
+
 
 ### Podrozdział ...
 
