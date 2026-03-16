@@ -138,11 +138,11 @@ gbm_simulation <- function(S0, mu, sigma, t, n, M) {
 
 Symulujemy w sposób standardowy, tj: w oparciu o wyestymowane wartości dryfu i zmienności korzystamy z wyżej zdefiniowanej funkcji do symulowania $M$ realizacji notowań z warunkiem początkowym $S_0$ zadanym przez wartość indeksu z dnia 01-01-2022.
 
-```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+```{r gbm_simulations_2022, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
 # Parametry t, n, M dla poniższych symulacji
 T_val <- 1
 n <- 250
-M <- 1000
+M <- 10000
 
 # Podział okresu symulowanych ścieżek
 time_seq <- seq(0, T_val, length.out = n + 1)
@@ -160,7 +160,7 @@ simulations <- list(
 )
 ```
 
-```{r, echo=FALSE, cache=TRUE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300}
+```{r gbm_chart_2022, echo=FALSE, cache=TRUE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300}
 title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
 
 # Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
@@ -246,7 +246,7 @@ legend_plot <- ggplot() +
   )
 ```
 
-#### Symulacje metodą bootstrap
+<!-- #### Symulacje metodą bootstrap -->
 
 ```{r, echo=FALSE}
 # Funkcja zwracająca macierz wysymulowanych ścieżek notowań pewnego instrumentu.
@@ -267,7 +267,7 @@ bootstrap_simulation <- function(S0, returns_set, n, M) {
 }
 ```
 
-```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+```{r bootstrap_simulations_2022, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
 
 ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
@@ -283,7 +283,7 @@ bootstrap_simulations_list <- list(
 )
 ```
 
-```{r, echo=FALSE, fig.width=12, fig.height=10, dev="png", dpi=300, cache=TRUE}
+```{r bootstrap_chart_2022, echo=FALSE, fig.width=12, fig.height=10, dev="png", dpi=300, cache=TRUE}
 # Funkcja do wykresów bootstrap
 plot_boot_panel <- function(sim_matrix, title_suffix, actual_data) {
   df_sim <- as.data.frame(sim_matrix) %>% 
@@ -368,10 +368,15 @@ legend_plot_boot <- ggplot() +
 ```
 
 
+```{r, results='asis', echo=FALSE}
+cat("\\paragraph{Podsumowanie predykcji na 1 rok}\n")
+```
 
-#### Podsumowanie predykcji na 1 rok (nagłówek do wywalenia)
+## Podsumowanie predykcji na 1 rok
 
-```{r, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+<!-- #### Podsumowanie predykcji na 1 rok (nagłówek do wywalenia) -->
+
+```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 # Dane historyczne (2021)
 dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 dane_2021_zwroty <- dane_2021_zwroty[is.finite(dane_2021_zwroty)]
@@ -433,9 +438,9 @@ hist1 | hist2 | hist3
 
 Wstępna ocena histogramów wskazuje na gaussowskość rozkładu zarówno zwrotów historycznych, jak i symulowanych przy pomocy geometrycznego ruchu Browna. Ilustruje to krzywa gęstości rozkładu normalnego na wykresach, jednak aby móc wydać taki osąd potrzebujemy narzędzi statystycznych, testu Shapiro-Wilka.
 
-H_0: Dane pochodzą z rozkładu normalnego \qquad H_1: Dane nie pochodzą z rozkładu normalnego
+$H_0$: Dane pochodzą z rozkładu normalnego \qquad $H_1$: Dane nie pochodzą z rozkładu normalnego
 
-```{r, echo=FALSE, cache=TRUE}
+```{r return_shapiro_2022, echo=FALSE, cache=TRUE}
 # Test dla danych historycznych
 shapiro_hist <- shapiro.test(dane_2021_zwroty)
 
@@ -476,7 +481,7 @@ kable(results,
 ```
 
 
-```{r, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+```{r return_qq_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 # QQ-plot 1: Historyczne
 qq1 <- ggplot(data.frame(x = dane_2021_zwroty), aes(sample = x)) +
   stat_qq(color = "#FF6B6B", size = 2, alpha = 0.7) +
@@ -511,9 +516,11 @@ qq1 | qq2 | qq3
 ```
 ### Symulacje notowań indeksu na lata 2022-2023
 
-#### Symulacja metodą standardową
+Przejdziemy teraz do predykcji notowań indeksu WIG20 w okresie dwuletnim. Ponownie symulacje przeprowadzimy dwoma metodami, jedną bardziej konserwatywną, symulując geometryczny ruch Browna, drugą korzystając z bootstrappingu.  
 
-Ponownie w pierwszej kolejności symulujemy w sposób standardowy. 
+<!-- #### Symulacja metodą standardową -->
+
+Ponownie w pierwszej kolejności symulujemy w sposób standardowy, czyli symulując GBM: 
 
 ```{r, echo=FALSE}
 T_val <- 2
@@ -524,7 +531,7 @@ n <- 500  # 250 dni * 2 lata
 time_seq <- seq(0, T_val, length.out = n + 1)
 ```
 
-```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
+```{r gbm_simulations_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
 # Parametry t, n, M dla poniższych symulacji - 2 LATA
 T_val <- 2
 n <- 500  # 250 dni * 2 lata
@@ -544,7 +551,9 @@ simulations_2y <- list(
   gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
   gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
 )
+```
 
+```{r gbm_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
 title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
 
 # Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
@@ -630,9 +639,9 @@ legend_plot <- ggplot() +
   )
 ```
 
-#### Symulacje metodą bootstrap
+<!-- #### Symulacje metodą bootstrap -->
 
-```{r, echo=FALSE, cache=TRUE}
+```{r bootstrap_simulations_2022_2023, echo=FALSE, cache=TRUE}
 # Zbiory zwrotów
 ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
@@ -648,7 +657,7 @@ bootstrap_simulations_2y <- list(
 )
 ```
 
-```{r, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+```{r bootstrap_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
 # Funkcja do wykresów bootstrap
 plot_boot_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
   df_sim <- as.data.frame(sim_matrix) %>%
@@ -734,7 +743,7 @@ legend_plot_boot <- ggplot() +
 
 ### Podsumowanie histogramów na dwa lata (równeiż do wywalenia nagłówek)
 
-```{r, echo=FALSE, fig.width=12, fig.height=4, cache=TRUE}
+```{r return_histogram_2022_2023, echo=FALSE, fig.width=12, fig.height=4, cache=TRUE}
 # Dane historyczne (2022-2023)
 dane_2022_2023_zwroty <- wig20_data %>% filter(year(Data) %in% c(2022, 2023)) %>% pull(Zwrot)
 dane_2022_2023_zwroty <- dane_2022_2023_zwroty[is.finite(dane_2022_2023_zwroty)]
@@ -806,7 +815,7 @@ hist3 <- ggplot() +
 hist1 | hist2 | hist3
 ```
 
-```{r, echo=FALSE, cache=TRUE}
+```{r return_shapiro_2022_2023, echo=FALSE, cache=TRUE}
 # Test dla danych historycznych
 shapiro_hist_2y <- shapiro.test(dane_2022_2023_zwroty)
 
@@ -846,7 +855,7 @@ kable(results_2y,
       caption = "Test Shapiro-Wilka normalności rozkładu zwrotów (2 lata)")
 ```
 
-```{r, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+```{r return_qq_2022_2023, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 # QQ-plot 1: Historyczne
 qq1 <- ggplot(data.frame(x = dane_2022_2023_zwroty), aes(sample = x)) +
   stat_qq(color = "#FF6B6B", size = 2, alpha = 0.7) +
