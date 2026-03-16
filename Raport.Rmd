@@ -32,8 +32,9 @@ knitr::opts_chunk$set(dev = "png")
 
 Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w ramach przedmiotu "Inżynieria finansowa 1". Projekt będzie obracał się w tematyce zabezpieczania opcji waniliowych i składał się z trzech części: 0 (rozgrzewkowa), A oraz B. W części 0 będziemy precyzować niezbędne parametry potrzebne w dalszych częściach (m.in. parametry modelu Blacka-Scholesa), takie jak trajektorie ruchu Browna czy symulacje na podstawie Bootstrapingu. Druga część, tj. część A, będzie opisywała działanie delta hedgingu pojdeynczej opcji na WIG20, gdzie będziemy badać skuteczność naszych naszych parametrów, a w ostatniej części, tj. części B, rozważymy zabezpieczanie poprzez tzw. delta hedging.
 
-# Część 0 - Indeks WIG20, Opcje, Symulacje notowań
+\newpage
 
+# Część 0 - Indeks WIG20, Opcje, Symulacje notowań
 
 ## WIG20
 
@@ -141,7 +142,7 @@ Symulujemy w sposób standardowy, tj: w oparciu o wyestymowane wartości dryfu i
 # Parametry t, n, M dla poniższych symulacji
 T_val <- 1
 n <- 250
-M <- 10000
+M <- 1000
 
 # Podział okresu symulowanych ścieżek
 time_seq <- seq(0, T_val, length.out = n + 1)
@@ -319,7 +320,7 @@ hist1 | hist2
 # n - liczba 'kroków', tj. podział okresu na części,
 # M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
 
-  bootstrap_simulation <- function(S0, returns_set, n, M) {
+bootstrap_simulation <- function(S0, returns_set, n, M) {
   sampled_increments <- matrix(sample(returns_set, size = M * n, replace = TRUE), nrow = M, ncol = n)
   sampled_increments_transformed <- cbind(rep(1, M), 1 + sampled_increments)
   simulated_price_paths <- S0 * t(apply(sampled_increments_transformed, 1, cumprod))
@@ -1001,26 +1002,144 @@ plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
 axis(side=4)
 ```
 
+\newpage
+
 # Część A - Delta-Hedging opcji call na WIG20
 
-W tej części będziemy rozważać handel opcjami call i put na indeksie WIG20. Zwrócimy swoją uwagę głównie na opcje zapadające w grudniu 2022(???) i będziemy starać się zabezpieczać payoff środkami wolnymi od ryzyka, takimi jak wolna gotówka odłożona na jakiejś lokacie (lub w przypadku kapitału ujemnego długu). Do tego posłuży nam sposób delta hedging. Parametry użyte przez nas to będą odpowiednie parametry wyznaczone we wcześniejszej części. 
+W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytucji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy przyjęty model cen opcji oraz strategie zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022.
 
-## Strategia zabezpieczająca
+## Model i strategia zabezpieczająca
+
+Rozpoczniemy od przedstawienia modelu Blacka-Scholesa, w oparciu o który będziemy w stanie skonstruować portfel zabezpieczający^[część rozdziału dotycząca wyprowadzenia modelu oraz konstrukcji portfela zabezpieczającego jest analogiczna do tej z książki Paula Wilmotta *On Quantitative Finance*, rozdział 5]. Oznaczmy przez $V$ wartość opcji (na razie nie doprecyzowujemy czy jest to opcja call, czy put) na indeks WIG20, a przez $S_t$ proces opisujący jego notowania - zakładamy, że notowania te są pewną realizacją Geometrycznego Ruchu Browna:
+$$
+dS_t = \mu S_t dt + \sigma S_t dX_t
+$$
+gdzie $\mu$ i $\sigma$ są pewnymi stałymi, a $X_t$ ruchem Browna. Rozważmy portfel $\Pi$ składający się z pojedynczej krótkiej pozycji na opcji $V$ oraz długiej pozycji w ilości $\Delta$ indeksu WIG20:
+$$
+\Pi = V - \Delta S.
+$$
+Korzystając z formuły Ito jesteśmy w stanie pokazać, że zmiana wartości tego portfela wynosi:
+$$
+d\Pi = \frac{\partial V}{\partial t}dt + \frac{\partial V}{\partial S}dS + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2}dt - \Delta dS
+$$
+wówczas, przyjmując $\Delta = \frac{\partial V}{\partial S}$ eliminujemy ze zmiany w portfelu element losowy $dS$, co sprawia, że zmiany w portfelu są całkowicie deterministyczne, więc muszą rosnąć zgodnie ze stopą procentową bez ryzyka, tj.:
+$$
+d\Pi = r \Pi dt
+$$
+łącząc powyższe równania w całość, otrzymujemy:
+$$
+\frac{\partial V}{\partial t}  + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2} + rS\frac{\partial V}{\partial S} - rV = 0
+$$
+czyli równanie Blacka-Scholesa. Doprecyzowując odpowiednie warunki brzegowe (czyli m.in. payoff danej opcji, wskazujący na to czy jest to opcja call czy put) jestesmy w stanie wyznaczyć analityczne rozwiązanie, które umożliwia wyznaczenie wartości $V$ oraz  wartości pochodnej cząstkowej $\frac{\partial V}{\partial S}$ w dowolnej chwili $t$. Dzięki wyznaczeniu wartości opcji w ten sposób uzyskaliśmy również postać samofinansującego portfela, który replikuje jej payoff:
+$$
+\Pi = \Delta S + B = \frac{\partial V}{\partial S} S + B
+$$
+gdzie $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$. Aktualizując ten portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
+
+Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, ...,t_n$, $t_0 = 0$ oraz, że w każdej z tych chwil znamy wartość (oznaczaną przez $S_{t_i}$) indeksu WIG20. W chwili $t_0 = 0$ sprzedajemy jedną opcję o wartości $V_0$ (krótka pozycja) oraz kupujemy indeks WIG20 (długa pozycja) w ilości $\Delta_0 = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_0}$. Pozostałe środki finansowe, czyli $C_0 = V_0 - \Delta_0$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$ (w następnej chwili ich wartość wynosi więc $C_{t_1} = C_0e^{r(t_1 - t_0)}$). 
+
+Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, czyli (zakładając, że obecna chwila to $t_i$): sprzedajemy posiadaną ilość (czyli $\Delta_{t_{i - 1}}$) indeksu WIG20, po czym kupujemy $\Delta_{t_{i}} = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_{t_i}}$ indeksu WIG20. Pozostałe środki finansowe, czyli $C_{t_i} = C_{t_{i - 1}}e^{r(t_{i} - t_{i - 1})} - (\Delta_{t_{i}} - \Delta_{t_{i - 1}})S_{t_i}$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$. 
+
+Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
+
+```{r, include = FALSE}
+#   Funkcja przeprowadzająca algorytm delta-hedgingowy
+#
+#   S0 - wartość aktywa w chwili 0, mu - dryf, sigma - zmienność, r - stopa wolna od ryzyka,
+#   n - liczba kroków (rehedginow), m - liczba powtórzeń algorytmu,
+#   K - cena wykonania opcji, option_premium - cena opcji (jeśli nic nie podamy, to 
+#   wyznaczamy ją ze wzoru Blacka-Scholesa), real_prices - wartości kolejnych notowań
+#   WIG20 (jeśli nic nie podamy, to symulujemy ją funkcją gbm_simulation, tak jak w poprzednich rozdziałach)
+#   option_type - typ opcji, 'C' (call, czyli domyślnie), w przeciwnym wypadku put
+BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
+  
+  #   Funkcja, która wyznacza wartość opcji według wzoru Blacka-Scholesa
+  BS_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(S*pnorm(d1) - K*exp(-r*(t_total - t))*pnorm(d2))}
+    else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
+  }
+ 
+  #   Funkcja, która wyznacza wartość delty opcji według wzoru Blacka-Scholesa 
+  BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
+    if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
+    else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
+  }
+  
+  
+  #   Macierze, które przechowują informacje o portfelu w kazdej chwili.
+  #   Potencjalnie przydatne w przyszłości do analizy wyników
+  #
+  #   deltas_matrix - macierz z wartością delty (ilości indeksu) w portfelu
+  #   deltas_matrix - macierz z wartością środków finansowych (pozyczonych/zainwestowanych) w portfelu
+  #   final_price_diffs - wektor zawierający roznice między payoffem replikowanej opcji,
+  #   a wartością naszego portfela replikującego
+  deltas_matrix = matrix(nrow = n, ncol = m)
+  cashs_matrix = matrix(nrow = n, ncol = m)
+  final_price_diffs = numeric(m)
+  
+  #   Pętla wykonująca algorytm m razy
+  for (j in 1:m) {
+    
+    tstep = 0
+    dt = t_total/n
+    
+    #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
+    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, n, 1))}
+    else {price_path = real_prices}
+    
+    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
+    if (is.na(option_premium)) {cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)}
+    else {cashs_matrix[1, j] = option_premium}
+    
+    #   Ustalenie wartości początkowych portfela
+    cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)
+    deltas_matrix[1, j] = BS_delta(S0, K, r, sigma, t, tstep, option_type)
+    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*S0
+    
+    #   Pętla wykonująca aktualizację stanu portfela (re-hedging)
+    for (i in 1:(n - 1)) {
+      
+      #   Zwiększenie momentu czasowego
+      tstep = tstep + dt
+      #   Wyznaczamy nową deltę
+      deltas_matrix[i + 1, j] = BS_delta(price_path[i + 1], K, r, sigma, t, tstep, option_type)
+      #   Aktualizujemy stan środków finansowych: wcześniej posiadane środki zwiększamy o odsetki i odejmujemy
+      #   różnicę między pieniędzmi wydanymi na nową deltę a tymi uzyskanymi ze sprzedaży starej
+      cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[i + 1]
+      
+    }
+    
+    #   Wyznaczenie payoffu w zależności od typu opcji
+    if (option_type == 'C') {payoff = max(price_path[251] - K, 0)}
+    else {payoff = max(K - price_path[251], 0)}
+    
+    #   Stan (wartość) portfela w finalnej chwili
+    portfolio = cashs_matrix[n, j] * exp(r*dt) + deltas_matrix[n, j] * price_path[n + 1]
+    
+    #   Wyznaczenie różnicy między wartością portfela a payoffem replikowanej opcji
+    final_price_diffs[j] = portfolio - payoff
+  }
+  
+  #   Zwracamy wektor różnic między wartością portfela a payoffem i macierze zawierające
+  #   dane o składnie portfela w każdej chwili
+  return(list(final_price_diffs, deltas_matrix, cashs_matrix)) 
+}
+```
+
+```{r include, eval=FALSE, include=FALSE}
+#   Zostawiam ten chunk jakbyście chcieli zobaczyć ten histogram, który wysłalem na messengerze
+#   albo jakbyście chcieli sami coś tu się pobawić
+result = BS_delta_hedging_algorithm(2270, 0.1, 0.2, 0.05, 1, n, 10000, 2240, option_premium = NA, real_prices = NA, option_type = 'P')
+hist(result[[1]], freq = FALSE, bins = 30)
+
+ggplot(data, aes(x = result[[1]])) +  geom_histogram(aes(y =..density..), binwidth=3, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
+  ggtitle("") + stat_function(fun = dnorm, args = list(mean = mean(result[[1]]), sd = sd(result[[1]])))
+```
 
 ### Podrozdział ...
-
-W tej części zajmiemy się analizą histogramów rozkładu zysku i straty z hedgowania opcjami call i put na indeksie WIG20. Założymy, że dynamika aktywa bazowego będzie opisywana geometrycznym ruchem Browna z odpowiednimi parametrami wyznaczonymi we wcześniejszej części, a także że opcje wyceniamy zgodnie z modelem Blacka-Scholesa.
-
-Skrócony algorytm delta hedgingu wygląda następująco: 
-  1. W chwili startowej $t_0$ obliczamy deltę opcji $\delta_0 = \delta (t_0, S_0)$ i kupujemy $\delta_0$ akcji. Środki, które nam zostały, trafiają na lokatę z oprocentowaniem r (lub w przypadku ujemnego kapitału, są długiem z tym samym oprocentowaniem)
-  2. W następnych chwilach obliczamy nową deltę $\delta_i = \delta (t_i, S_{t_i})$, a następnie zmieniamy ilość akcji tak, by w chwili $t_i$ była ona równa ilości $\delta_{t_i}$
-  3. Wartość portfela jest w każdym momencie aktualizowana uwzględniając zmianę cen akcji oraz odsetki saldawolnego od ryzyka
-  4. W chwili wygaśnięcia opcji ($T_n = T$) końcowy zysk obliczamy jako wartość portfela zabezpieczającego pomniejszoną o payoff opcji
-  
-  
-  I ogólnie to znalazłem taki wzór w tej książce Wilmotta na V. Dla S <= E V = 0
-
-$$ V = S - E + rE \delta t \quad dla \quad S > E $$
 
 ## Analiza wpływu częstotliwości re-hedgingu
 
@@ -1031,6 +1150,8 @@ $$ V = S - E + rE \delta t \quad dla \quad S > E $$
 ### Podrozdział ...
 
 ## Podsumowanie
+
+\newpage
 
 # Część B - Delta-Gamma-Hedging opcji call na WIG20 z wykorzystaniem opcji binarnych
 
@@ -1056,58 +1177,98 @@ $$ V = S - E + rE \delta t \quad dla \quad S > E $$
 
 ## Podsumowanie
 
+\newpage
 
 # Dodatek
 
-## Symulacje notowań pojedynczego aktywa
+## Rozwiązanie równania Blacka-Scholesa i wzory na delty w portfelu zabezpieczającym
 
-### Symulacje metodą standardową (Geometryczny ruch Browna)
+W części A w zwięzły sposób wyprowadziliśmy równanie Blacka-Scholesa oraz przedstawiliśmy skład portfela zabezpieczającego, który repilkuje payoff pewnej opcji. Implementacja strategii zabezpieczającej, którą również w tej części analizowaliśmy, wymaga znajomości dokładnych wartości numerycznych wartości opcji $V$ (czyli rozwiązania wspomnianego równania Blacka-Scholesa) oraz jej pochodnej po $S$, czyli $\frac{\partial V}{\partial S}$ - poniżej przedstawiamy dokładne wzory analityczne tych funkcji:
+$$
+C = SN(d_1) - Ke^{-rT}N(d_2)
+$$
+$$
+P = -SN(-d_1) + Ke^{-rT}N(-d_2)
+$$
+$$
+d_1 = \frac{log(S/K) + (r - \frac{\sigma^2}{2})T}{\sigma \sqrt{T}}, \;\;\;\;\;\;\; d_2 = d_1 - \sigma \sqrt{T}
+$$
+gdzie $C$ i $P$ są odpowiednio wartościami (cenami) opcji call i put w chwili $0$, $T$ jest czasem do zapadnięcia opcji, $K$ jest ceną wykonania, $r$ stopą wolną od ryzyka, $\sigma$ zmiennością indeksu WIG20, a $N(x)$ jest wartością dystrybuanty standardowego rozkładu normalnego w punkcie $x$. Wówczas, odpowiednie delty, czyli przy przyjętych oznaczeniach $\frac{\partial C}{\partial S}$ i $\frac{\partial P}{\partial S}$ mają postać:
+$$
+\frac{\partial C}{\partial S} = N(d_1), \;\;\;\;\;\;\; \frac{\partial P}{\partial S} = N(d_1) - 1
+$$
 
-Symulację geometrycznego ruchu Browna opieramy na analitycznym rozwiązaniu charakteryzującego go równania różniczkowego:
-$$S_t = S_{0}\; \text{exp}((\mu - \frac{\sigma ^ 2}{2}) t + \sigma X_t)$$
-gdzie $X_t$ jest procesem Wienera (ruchem Browna). Symulując przybliżone realizacje $X_t$ jesteśmy w stanie wyznaczyć przybliżoną wartość realizacji $S_t$ dla dowolnego $t \in T$.
+## Symulacje notowań aktywów
 
-### Symulacje metodą bootstrap
+W tym rozdziale krótko opisujemy metody symulacji notowań wykorzystywane w poprzednich rozdziałach; wszystkie z nich można podzielić na tzw. metodę standardową oraz na metodę bootstrappową - pierwsza z nich odnosi się do symulowania Geometrycznego Ruchu Browna, którego odpowiednia parametryzacja umożliwia modelowanie notowań wielu różnorodnych aktywów, a druga odnosi się do korzystania z procedury bootstrapingu, czyli z próbkowania ze zbioru danych historycznych danego aktywa w celu generowania nowych notowań. Szczegóły dla odrębnych zastosowań obu metod przedstawiamy w poniższych podrozdziałach. 
 
-Symulujemy trajektorie korzystając z metody bootstrap, czyli: losujemy ze zbioru historycznych zwrotów (?nie wiedziałem jak to napisać) $\{R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}} : i \in I \}$ (gdzie $I$ definiuje okres, z którego przyrosty będziemy losować), a następnie wyznaczamy wartość $S_t$ iteratywnie:
+### Symulacje notowań pojedynczego aktywa
+
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań pojedynczego aktywa.
+
+#### Symulacje metodą standardową (Geometryczny Ruch Browna)  
+$\\$
+$\\$
+Symulacje przeprowadzone metodą standardową opieramy o założenie, że rozwój notowań danego aktywa opisuje proces stochastyczny znany jako Geometryczny Ruch Browna - proces ten spełnia następujące stochastyczne równanie różniczkowe:
+$$
+dS_t = \mu S_t dt + \sigma S_t dX_t
+$$
+gdzie $dX_t$ jest ruchem Browna, a $\mu$ i $\sigma$ są stałymi. Aby uzyskać wiarygodne symulacje musimy zatem znać przynajmniej przybliżone wartości $\mu$ i $\sigma$ - jesteśmy w stanie je oszacować korzystając ze standardowych estymatorów:
+$$
+R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}}, \;\;\; \hat{\mu} = \frac{1}{n \Delta t}\sum_{i = 1}^nR_i, \;\;\; \hat{\sigma} = \sqrt{\frac{1}{(n - 1) \Delta t}\sum_{i = 1}^n(R_i - \hat{\mu})^2}
+$$
+gdzie $R_i$ jest $i$-tym zwrotem, a $\Delta t$ odstępem czasowym między kolejnymi notowaniami (dla każdego roku mamy średnio 250 notowań, czyli średnio $\Delta t = \frac{1}{250}$). Po przeprowadzeniu estymacji parametrów jesteśmy w stanie przystąpić do symulacji Geometrycznego Ruchu Browna; jego symulację opieramy o analityczne rozwiązanie charakteryzującego go równania różniczkowego:
+$$
+S_t = S_{0}\; \text{exp}((\mu - \frac{\sigma ^ 2}{2}) t + \sigma X_t)
+$$
+Symulując przybliżone realizacje $X_t$ (ruchu Browna) oraz korzystając z wyestymowanych wartości $\hat{\mu}$ i $\hat{\sigma}$ jesteśmy w stanie wyznaczyć przybliżoną wartość realizacji $S_t$ dla dowolnego $t \in T$.
+
+#### Symulacje metodą bootstrap  
+$\\$
+$\\$
+Symulucje przeprowadzone metodą bootstrappową opieramy o fakt, że notowania aktywa jestesmy w stanie przedstawić jako iloczyn pewnej wartości początkowej i ciągu ułamkowych zmian notowań. W celu wygenerowania pojedynczej trajektorii, losujemy pewną liczbę elementów ze zbioru historycznych zwrotów $\{R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}} : i \in I \}$ (gdzie $I$ definiuje okres, z którego przyrosty będziemy losować), a następnie wyznaczamy wartość notowania w momencie $t_n$ mnożąc wartość początkową $S_0$ i przeskalowane wylosowane przyrosty:
 $$
 S_{t_n} = S_{0}(1 + R_{i_{1}})(1 + R_{i_{2}})...(1 + R_{i_{n}}) = S_0 \frac{S_{i_{1}}}{S_{i_{1} - 1}}\frac{S_{i_{2}}}{S_{i_{2} - 1}}...\frac{S_{i_{n}}}{S_{i_{n} - 1}}
 $$
 
-## Symulacje notowań dwóch aktywów skorelowanych
+### Symulacje notowań dwóch aktywów skorelowanych
 
-### Symulacje metodą standardową (skorelowane Geometryczne ruchy Browna)
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji.
 
-Rozważmy dwa geometryczne ruchy Browna, $S_t^{(1)}$ i $S_t^{(2)}$, których współczynnik korelacji wynosi $\rho$. Wówczas, jeśli $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
+#### Symulacje metodą standardową (skorelowane Geometryczne Ruchy Browna)  
+$\\$
+$\\$
+Metoda standardowa symulacji dwóch aktywów skorelowanych jest analogiczna do tej z przypadku pojedynczego aktywa - również przyjmujemy założenie, że rozwój notowań obu aktywów jest opisany przez Geometryczny Ruch Browna charakteryzowany przez pewne stałe $\mu_1, \sigma_1$ dla aktywa pierwszego oraz $\mu_2, \sigma_2$ dla aktywa drugiego (analogicznie jak w przypadku pojedynczego aktywa estymujemy te parametry na podstawie danych historycznych). Aby uwzględnić korelację (opisywaną przez parametr $\rho$, który jesteśmy w stanie oszacować analogicznie jak parametry $\mu$ i $\sigma$) między dwoma aktywami musimy przedstawić opisujące je procesy stochasyczne w odpowiedni sposób - załóżmy, że $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
 $$
-X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}
+X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}.
 $$
-to $S_t^{(1)}$ i $S_t^{(2)}$ możemy przedstawić w postaci następujących stochastycznych równań różniczkowych:
+Wówczas, $S_t^{(1)}$ i $S_t^{(2)}$, czyli Geometryczne Ruchy Browna opisujące notowania rozważanych aktywów spełniają poniższy układ równań:
 $$
 dS_t^{(1)} = S_t^{(1)}\mu_1 dt + S_t^{(1)} \sigma_1 dX_t^{(1)}
 $$
 $$
 dS_t^{(2)} = S_t^{(2)}\mu_2 dt + S_t^{(2)} \sigma_1 dX_t^{(2)}
 $$
-W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania pojedynczego geometrycznego ruchu Browna.
+W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania metodą standardową notowań pojedynczego aktywa.
 
-### Symulacje metodą bootstrap
-
-Symulacje metodą bootstrap przeprowadzamy analogicznie do przypadku bootstrapowego symulowania pojedynczego geometrycznego ruchu Browna, z drobną zmianą, która umożliwia uchwycenie trendu (skorelowania) w symulacji: mając dwa zbiory indeksowanych zwrotów:
+#### Symulacje metodą bootstrap  
+$\\$
+$\\$
+Symulacje przeprowadzone metodą bootstrappową dla dwóch aktywów skorelowanych przeprowadzamy analogicznie do przypadku bootstrapowego symulowania notowań pojedynczego aktywa z niewielką zmianą, która umożliwia uchwycenie trendu (skorelowania) w symulacji: mając dwa zbiory indeksowanych zwrotów:
 $$
 R^{(1)} = \{R_i^{(1)} = \frac{S_{i}^{(1)} - S_{i - 1}^{(1)}}{S_{i - 1}^{(1)}} : i \in I \}
 $$
 $$
 R^{(2)} = \{R_i^{(2)} = \frac{S_{i}^{(2)} - S_{i - 1}^{(2)}}{S_{i - 1}^{(2)}} : i \in I \}
 $$
-odpowiednio aktywów $S^{(1)}$ i $S^{(2)}$, losujemy ciąg indeksów $(i_1, ..., i_n)$ ze zbioru $I$, a następnie wyznaczamy wartości $S_t^{(1)}$ i $S_t^{(2)}$ iteratywnie:
+odpowiednio aktywów $S^{(1)}$ i $S^{(2)}$, losujemy ciąg indeksów $(i_1, ..., i_n)$ ze zbioru $I$, a następnie wyznaczamy wartości $S_t^{(1)}$ i $S_t^{(2)}$ analogicznie jak w przypadku symulacji notowań pojedynczego aktywa:
 $$
 S_{t_n}^{(1)} = S_{0}^{(1)}(1 + R_{i_{1}}^{(1)})(1 + R_{i_{2}}^{(1)})...(1 + R_{i_{n}}^{(1)})
 $$
 $$
 S_{t_n}^{(2)} = S_{0}^{(2)}(1 + R_{i_{1}}^{(2)})(1 + R_{i_{2}}^{(2)})...(1 + R_{i_{n}}^{(2)}).
 $$
-Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane (ponieważ $S^{(1)}$ i $S^{(2)}$ są ze sobą skorelowane).
+Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane..
 
 
 
