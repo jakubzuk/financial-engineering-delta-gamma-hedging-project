@@ -17,6 +17,9 @@ library(tidyverse)
 library(lubridate)
 library(patchwork)
 library(knitr)
+library(dplyr)
+library(purrr)
+library(tidyr)
 ```
 
 ```{r, include=FALSE}
@@ -1325,11 +1328,11 @@ Z wykresu trajektorii możemy wyciągnąć wnioski, iż jest to do pewnego stopn
 
 # Część A - Delta-Hedging opcji call na WIG20
 
-W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytucji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy przyjęty model cen opcji oraz strategie zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022.
+W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytuacji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy przyjęty model cen opcji oraz strategie zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022.
 
 ## Model i strategia zabezpieczająca
 
-Rozpoczniemy od przedstawienia modelu Blacka-Scholesa, w oparciu o który będziemy w stanie skonstruować portfel zabezpieczający^[część rozdziału dotycząca wyprowadzenia modelu oraz konstrukcji portfela zabezpieczającego jest analogiczna do tej z książki Paula Wilmotta *On Quantitative Finance*, rozdział 5]. Oznaczmy przez $V$ wartość opcji (na razie nie doprecyzowujemy czy jest to opcja call, czy put) na indeks WIG20, a przez $S_t$ proces opisujący jego notowania - zakładamy, że notowania te są pewną realizacją Geometrycznego Ruchu Browna:
+Rozpoczniemy od przedstawienia modelu Blacka-Scholesa, w oparciu o który będziemy w stanie skonstruować portfel zabezpieczający^[część rozdziału dotycząca wyprowadzenia modelu oraz konstrukcji portfela zabezpieczającego jest analogiczna do tej z książki Paula Wilmotta *On Quantitative Finance*, rozdział 5]. Oznaczmy przez $V$ wartość opcji (na razie nie doprecyzowujemy czy jest to opcja call, czy put) na indeks WIG20, a przez $S_t$ wartość indeksu w chwili $t$, czyli matematycznie proces stochastyczny opisujący jego notowania - zakładamy, że notowania te są pewną realizacją Geometrycznego Ruchu Browna:
 $$
 dS_t = \mu S_t dt + \sigma S_t dX_t
 $$
@@ -1360,6 +1363,8 @@ Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, .
 Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, czyli (zakładając, że obecna chwila to $t_i$): sprzedajemy posiadaną ilość (czyli $\Delta_{t_{i - 1}}$) indeksu WIG20, po czym kupujemy $\Delta_{t_{i}} = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_{t_i}}$ indeksu WIG20. Pozostałe środki finansowe, czyli $C_{t_i} = C_{t_{i - 1}}e^{r(t_{i} - t_{i - 1})} - (\Delta_{t_{i}} - \Delta_{t_{i - 1}})S_{t_i}$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$. 
 
 Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
+
+## Analiza wpływu częstotliwości re-hedgingu
 
 ```{r, include = FALSE}
 #   Funkcja przeprowadzająca algorytm delta-hedgingowy
@@ -1624,10 +1629,298 @@ put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1
 
 ```
 
+Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze (RACHUNEK?). Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).  
 
 ### Podrozdział ...
 
-## Analiza wpływu częstotliwości re-hedgingu
+```{r quantiles_rehedging_delta, echo=FALSE, cache=TRUE}
+set.seed(123)
+
+N_steps <- 250
+dt_day <- t / N_steps
+
+# macierz ścieżek: wiersze = czas, kolumny = symulacje
+sim_paths <- matrix(NA, nrow = N_steps + 1, ncol = M)
+sim_paths[1, ] <- S0
+
+for (j in 1:M) {
+  Z <- rnorm(N_steps)
+  for (i in 1:N_steps) {
+    sim_paths[i + 1, j] <- sim_paths[i, j] * exp((mu - 0.5 * sigma^2) * dt_day + sigma * sqrt(dt_day) * Z[i])
+  }
+}
+
+```
+```{r new_hedging_functions, echo=FALSE, cache=TRUE}
+BS_price <- function(S, K, r, sigma, tau, option_type) {
+  if (tau <= 0) {
+    if (option_type == "C") return(pmax(S - K, 0))
+    else return(pmax(K - S, 0))
+  }
+  
+  d1 <- (log(S / K) + (r + 0.5 * sigma^2) * tau) / (sigma * sqrt(tau))
+  d2 <- d1 - sigma * sqrt(tau)
+  
+  if (option_type == "C") {
+    return(S * pnorm(d1) - K * exp(-r * tau) * pnorm(d2))
+  } else {
+    return(K * exp(-r * tau) * pnorm(-d2) - S * pnorm(-d1))
+  }
+}
+
+BS_delta <- function(S, K, r, sigma, tau, option_type) {
+  if (tau <= 0) {
+    if (option_type == "C") return(as.numeric(S > K))
+    else return(-as.numeric(S < K))
+  }
+  
+  d1 <- (log(S / K) + (r + 0.5 * sigma^2) * tau) / (sigma * sqrt(tau))
+  
+  if (option_type == "C") {
+    return(pnorm(d1))
+  } else {
+    return(pnorm(d1) - 1)
+  }
+}
+
+hedging_errors_from_paths <- function(sim_paths, n, K, r, sigma, t, option_type) {
+  N_steps <- nrow(sim_paths) - 1
+  M <- ncol(sim_paths)
+  
+  dt <- t / n
+  hedge_times <- seq(0, t, length.out = n)
+  hedge_idx <- floor(hedge_times * N_steps / t) + 1
+  hedge_idx[hedge_idx > (N_steps + 1)] <- N_steps + 1
+  
+  errors <- numeric(M)
+  
+  for (j in 1:M) {
+    path <- sim_paths[, j]
+    
+    S_init <- path[1]
+    tau <- t
+    delta_old <- BS_delta(S_init, K, r, sigma, tau, option_type)
+    cash <- BS_price(S_init, K, r, sigma, tau, option_type) - delta_old * S_init
+    
+    if (n > 1) {
+      for (i in 2:n) {
+        S_now <- path[hedge_idx[i]]
+        tau <- t - hedge_times[i]
+        
+        delta_new <- BS_delta(S_now, K, r, sigma, tau, option_type)
+        cash <- cash * exp(r * dt) - (delta_new - delta_old) * S_now
+        delta_old <- delta_new
+      }
+    }
+    
+    S_T <- path[N_steps + 1]
+    payoff <- if (option_type == "C") max(S_T - K, 0) else max(K - S_T, 0)
+    portfolio <- cash + delta_old * S_T
+    
+    errors[j] <- portfolio - payoff
+  }
+  
+  return(errors)
+}
+```
+
+```{r new_quantiles_rehedging, echo=FALSE, cache=TRUE}
+
+rehedge_counts <- seq(5, 250, by = 5)
+
+compute_quantiles <- function(option_type, option_name) {
+  map_dfr(rehedge_counts, function(n) {
+    x <- hedging_errors_from_paths(
+      sim_paths = sim_paths,
+      n = n,
+      K = K,
+      r = r,
+      sigma = sigma,
+      t = t,
+      option_type = option_type
+    )
+    
+    tibble(
+      option = option_name,
+      rehedges = n,
+      q05 = quantile(x, 0.05),
+      q10 = quantile(x, 0.10),
+      q25 = quantile(x, 0.25),
+      q50 = quantile(x, 0.50),
+      q75 = quantile(x, 0.75),
+      q90 = quantile(x, 0.90),
+      q95 = quantile(x, 0.95)
+    )
+  })
+}
+
+call_quantiles <- compute_quantiles("C", "CALL")
+put_quantiles  <- compute_quantiles("P", "PUT")
+```
+
+```{r plot_rehedging_quantiles_delta, echo=FALSE, cache=TRUE}
+quantiles_all <- bind_rows(call_quantiles, put_quantiles)
+
+quantiles_long <- quantiles_all %>%
+  pivot_longer(cols = starts_with("q"), names_to = "quantile", values_to = "value")
+
+quantile_levels <- c("q05", "q10", "q25", "q50", "q75", "q90", "q95")
+quantile_labels <- c(
+  q05 = "0.05",
+  q10 = "0.10",
+  q25 = "0.25",
+  q50 = "0.50",
+  q75 = "0.75",
+  q90 = "0.90",
+  q95 = "0.95"
+)
+
+quantile_colors <- c(
+  q05 = "red3",
+  q10 = "orange3",
+  q25 = "goldenrod2",
+  q50 = "deepskyblue3",
+  q75 = "goldenrod2",
+  q90 = "orange3",
+  q95 = "red3"
+)
+
+quantiles_long$quantile <- factor(quantiles_long$quantile, levels = quantile_levels)
+
+p_call <- ggplot(filter(quantiles_long, option == "CALL"),
+                 aes(x = rehedges, y = value, color = quantile, group = quantile)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_manual(values = quantile_colors, labels = quantile_labels) +
+  labs(
+    title = "Opcja CALL",
+    x = "Liczba rehedgingów",
+    y = "Wartość kwantyla",
+    color = "Kwantyl"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_put <- ggplot(filter(quantiles_long, option == "PUT"),
+                aes(x = rehedges, y = value, color = quantile, group = quantile)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_manual(values = quantile_colors, labels = quantile_labels) +
+  labs(
+    title = "Opcja PUT",
+    x = "Liczba rehedgingów",
+    y = "Wartość kwantyla",
+    color = "Kwantyl"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+(p_call | p_put) +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = "Kwantyle błędu hedgingowego w zależności od liczby rehedgingów",
+    subtitle = "Porównanie rozkładów dla opcji CALL i PUT",
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 10, color = "gray40", hjust = 0.5)
+    )
+  ) &
+  theme(legend.position = "bottom")
+```
+
+Zgodnie z przewidywaniami linie kwantylowe odległe od siebie dla rzadkiego rehedgingu, zbiegają do mediany dla hedgingu częstego. Ponownie gdybyśmy rozważyli granicę rehedgingu ciągłego, dostalibyśmy linie kwantylowe nakłądające się na siebie. Na powyższych wykresach, zwłaszcza dla opcji PUT, widać cięzkie ogony, które rozciągają skrajne krzywe kwantylowe mocno w kierunku wartości skrajnych. Mediana niezależnie od częstotliwości hedgowania jest bliska zeru i wraz ze zwiększaniem częstotliwości, zbiega bliżej zera. Ta obserwacja pokrywa się z wnioskiem o dążeniu histogramów do miary Diraca w zerze wraz ze zwiększaneim częstotliwości, więc jest to spójne z poprzednimi obserwacjami.
+
+### Kiedy wystarczająco dobrze? (moje nagłówki serio do zmiany...)
+
+Jak widać w powyższej analizie, chcielibyśmy rehedgować jak najczęściej, wtedy całkowicie uodparniamy się na losowość zmian aktywa. W rzeczywistości jednak, ciągły rehedging jest niemożliwy a sama operacja rehedgingu wiąże się z kosztami. Dobrym rozwiązaniem byłoby więc znalezienie takiej częstotliwości rehedgingu, która jest jak najrzadsza zapewniając przy tym wystarczająco dobre rezultaty (odpowiednio niskie odchylenia).
+
+Rozważymy kilka wartości tolerowanego błędu hedgingowego. Żądamy, żeby z $95\%$ (WPISANE Z PALCA, MOŻE NIEWŁAŚCIWA WARTOŚĆ?) prawdopodobieństwem nasza faktyczna różnica była co do modułu mniejsza niż ustalona granica tolerancji. Innymi słowy dla granicy tolerancji $\varepsilon$ i błędu hedgingowego $e$ żądamy:
+
+$$ \mathbb{P}[|e| \leq \varepsilon] \geq 0.95 $$
+
+```{r tolerance_rehedging_delta, echo=FALSE, cache=TRUE, fig.width=12, fig.height=8}
+
+# Liczby rehedgingów, które badamy
+rehedge_counts <- seq(5, 250, by = 5)
+
+# Poziomy tolerancji błędu
+epsilons <- c(10, 20, 30)
+
+# Funkcja licząca prawdopodobieństwo sukcesu:
+# sukces = |błąd hedgingowy| <= epsilon
+compute_success_probabilities <- function(option_type, option_name) {
+  map_dfr(epsilons, function(epsilon) {
+    map_dfr(rehedge_counts, function(n) {
+      errors <- hedging_errors_from_paths(
+        sim_paths = sim_paths,
+        n = n,
+        K = K,
+        r = r,
+        sigma = sigma,
+        t = t,
+        option_type = option_type
+      )
+      
+      tibble(
+        option = option_name,
+        epsilon = epsilon,
+        rehedges = n,
+        prob_success = mean(abs(errors) <= epsilon)
+      )
+    })
+  })
+}
+
+# Liczenie wyników
+success_call <- compute_success_probabilities("C", "CALL")
+success_put  <- compute_success_probabilities("P", "PUT")
+
+success_all <- bind_rows(success_call, success_put)
+
+# Tabela: minimalna liczba rehedgingów spełniająca kryterium 95%
+min_rehedges_table <- success_all %>%
+  filter(prob_success >= 0.95) %>%
+  group_by(option, epsilon) %>%
+  summarise(min_rehedges = min(rehedges), .groups = "drop")
+
+# Jeśli dla jakiegoś epsilon nie udało się osiągnąć 0.95, uzupełniamy brak
+min_rehedges_table_full <- expand.grid(
+  option = c("CALL", "PUT"),
+  epsilon = epsilons
+) %>%
+  as_tibble() %>%
+  left_join(min_rehedges_table, by = c("option", "epsilon")) %>%
+  mutate(min_rehedges = ifelse(is.na(min_rehedges), NA, min_rehedges))
+```
+
+```{r plot_tolerance_rehedging_delta, echo=FALSE, cache=TRUE, fig.width=12, fig.height=8}
+# Wykres
+ggplot(success_all, aes(x = rehedges, y = prob_success, color = option)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0.95, linetype = "dashed", color = "black") +
+  scale_y_continuous(limits = c(0, 1)) +
+  facet_wrap(~epsilon, labeller = labeller(epsilon = function(x) paste("Tolerancja =", x))) +
+  labs(
+    title = "Prawdopodobieństwo uzyskania błędu hedgingowego w granicach tolerancji",
+    subtitle = "Pozioma linia przerywana oznacza poziom 95%",
+    x = "Liczba rehedgingów",
+    y = "Prawdopodobieństwo spełnienia warunku |błąd| ≤ tolerancja",
+    color = "Typ opcji"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+
+# Tabela wyników
+kable(
+  min_rehedges_table_full,
+  col.names = c("Typ opcji", "Tolerancja", "Minimalna liczba rehedgingów"),
+  caption = "Minimalna liczba rehedgingów zapewniająca spełnienie warunku z prawdopodobieństwem co najmniej 95%"
+)
+```
+
+Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarczy przeprowadzać rehedging dużo rzadziej niż każdego dnia. Ciekawym przypadkiem jest poziom tolerancji $\varepsilon = 10$. Niezależnie od częstotliwości hedgowania, nie jesteśmy w stanie osiągnąć żądanego wcześniej prawdopodobieństwa. Dla większych tolerancji jest to osiągane.
 
 ### Podrozdział ...
 
