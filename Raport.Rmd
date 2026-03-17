@@ -1210,6 +1210,7 @@ p6 <- plot_put_hist(ST_values, strikes[6], x_limits, y_limits)
 
 ### Symulacje metodą standardową
 
+
 ```{r, echo=FALSE}
 # Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
 # realizacje skorelowanych geometrycznych ruchów Browna
@@ -1279,7 +1280,7 @@ axis(side=4)
 ```{r, echo=FALSE}
 cat(cor(wig_2021_zwroty, kghm_2021_zwroty))
 ```
-
+Na podstawie wykresu możemy zaobserwować, że większość picków pojawia się w podobnych miejscach czasu dla obu aktywów, natomiast widać różnicę pomiędzy wartościami. Może to sugerować, że nie jest to korelacja równa 1 z różnicą co do znaku, ale prawie na pewno możemy wywnioskować, że występuje jakaś korelacja między trajektoriami.
 
 ### Symulacje metodą bootstrap
 
@@ -1317,6 +1318,8 @@ par(new=TRUE)
 plot(1:251, x[[2]], type='l', col="red", axes=FALSE, xlab='', ylab='')
 axis(side=4)
 ```
+
+Z wykresu trajektorii możemy wyciągnąć wnioski, iż jest to do pewnego stopnia skorelowane, gdyż możemy zauważyć, że picki są w bardzo podobnych momentach czasu. Oczywistym jest, że będą pojawiać się różnice pomiędzy wartościami, o jakie wzrastają/spadają trajektorie, natomiast może to wynikać z tego, że WIG20 jest indeksem opierającym się nie tylko na wartości KGHM, ale też na 19 innych akcjach. 
 
 \newpage
 
@@ -1640,9 +1643,48 @@ put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1
 
 (Dokładny opis zadania, scenariusz sytuacji, tj. inwestycji, którą zabezpieczamy)
 
+W tej części będziemy chcieli się zabezpieczyć nie tylko samym aktywem bazowym, to jest indeksem WIG20, ale również z poczatku jedną, a w następnych momentach wieloma opcjami binarnymi. Dodatkowo wprowadzamy w tej części koszty transakcyjne w wysokości 0.4% przy obrocie w dowolną stronę. Będziemy chcieli stosować tzw. delta-gamma hedging, a więc nie będziemy chcieli zerować tylko delty samego portfela, ale i gammę, co jest druga pochodną ceny portfela po cenie aktywa bazowego. 
 ## Założenia dotyczące rynku
 
 (Opis instrumentów jakie mamy do dyspozycji (inwestycja wolna od ryzyka, opcje zwykłe i binarne, indeks), możliwości częstości re-hedgingu, opłaty transakcyjne)
+
+Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
+
+$$ 
+  \frac{\partial \Pi}{\partial S} = - \frac{\partial V}{\partial S}+ \alpha + \beta \frac{\partial B}{\partial S} = 0
+$$
+$$ 
+\frac{\partial^2 \Pi}{\partial S^2} = - \frac{\partial^2 V}{\partial S^2} + \beta \frac{\partial^2 B}{\partial S^2} = 0
+$$
+gdzie 
+* S - cena aktywa bazowego
+* V - cena zabezpieczanej opcji waniliowej
+* $\Pi$ - wartość całego portfela
+* B - cena opcji binarnej
+* $\alpha$ - ilość posiadanego aktywa bazowego
+* $\beta$ - ilość posiadanych opcji binarnych
+
+Dla jednej opcji binarnej $\alpha$ i $\beta$ są wyznaczone jednoznacznie:
+$$
+  \alpha = \Delta_V - \beta \Delta_B
+$$
+$$
+  \beta = \frac{\Gamma_V}{\Gamma_B}
+$$
+Gdzie $\Gamma_B$ i $\Gamma_V$ to gammy odpowiednio opcji binarnych i waniliowych, natomiast $\Delta_B$ i $\Delta_V$ to delty odpowiednio dla tych opcji. Tak natomiast wyglądają wzory na gammy opcji binarnych i europejskich:
+$$
+  \Gamma_{Call} = \Gamma_{Put} = \frac{N'(d_1)}{S \sigma \sqrt{T-t}}
+$$
+$$
+  \Gamma_{BinaryPut} = - \Gamma_{BinaryCall} = \frac{d_1 N'(d_2)}{\sigma^2 S^2 (T-t)}
+$$
+$$
+  \Delta_{Call} = N(d_1) = \Delta_{Put} +1
+$$
+$$
+  \Delta_{BinaryCall} = -\Delta_{BinaryPut} = \frac{N'(d_2)}{\sigma S \sqrt{T-t}}
+$$
+gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
 
 ## Strategie zabezpieczające 
 
@@ -1716,7 +1758,7 @@ $$
 
 ### Symulacje notowań dwóch aktywów skorelowanych
 
-W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji.
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi 0.69723 (?), co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około 71% zgodności.
 
 #### Symulacje metodą standardową (skorelowane Geometryczne Ruchy Browna)  
 $\\$
@@ -1737,6 +1779,7 @@ W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$,
 #### Symulacje metodą bootstrap  
 $\\$
 $\\$
+Symulacje metodą bootstrap dla dwóch skorelowanych aktywów ma sens jedynie wtedy, gdy zamiast losować jakieś momenty dla pierwszego i drugiego zwrotu, losujemy jakiś jeden moment dla obydwu aktywów. W ten sposób uzyskujemy historyczny moment rzeczywistego skorelowania obu aktywów, gdyż wzrost jednego z nich, mimo dodatniej korelacji, nie implikuje wzrost drugiego. Historyczne zwroty pokazują właśnie tą zależność, o czym jest wspomniane w podrozdziale "Symulacje notowań dwóch aktywów skorelowanych".   
 Symulacje przeprowadzone metodą bootstrappową dla dwóch aktywów skorelowanych przeprowadzamy analogicznie do przypadku bootstrapowego symulowania notowań pojedynczego aktywa z niewielką zmianą, która umożliwia uchwycenie trendu (skorelowania) w symulacji: mając dwa zbiory indeksowanych zwrotów:
 $$
 R^{(1)} = \{R_i^{(1)} = \frac{S_{i}^{(1)} - S_{i - 1}^{(1)}}{S_{i - 1}^{(1)}} : i \in I \}
@@ -1752,7 +1795,6 @@ $$
 S_{t_n}^{(2)} = S_{0}^{(2)}(1 + R_{i_{1}}^{(2)})(1 + R_{i_{2}}^{(2)})...(1 + R_{i_{n}}^{(2)}).
 $$
 Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane..
-
 
 
 
