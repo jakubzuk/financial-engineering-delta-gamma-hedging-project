@@ -70,7 +70,7 @@ wig20_data %>%
 
 Jak widać, w okresie 2015-2020 indeks WIG20 wykazywał względną stabilność (poza około dwuletnim okresem spadkowym po 2015), a od 2020 charakteryzuje się stabilnym wzrostem, przerwanym dwoma znaczącymi wydarzeniami o ogromnych konsekwencjach gospodarczych, czyli pandemii COVID-19 oraz wybuchu pełnoskalowej wojny na Ukrainie.
 
-## Estymacja dryfu i zmienności indeksu WIG20
+## Estymacja dryfu i zmienności indeksu WIG20, analiza normalności
 
 Zanim przejdziemy do analizy rozkładu dziennych zwrotów indeksu i symulacji, wyznaczymy wartości tych zwrotów i na ich podstawie wyznaczymy wartości estymatorów dryfu i zmienności - parametry te będą kluczowe podczas symulacji Geometrycznych Ruchów Browna. Do wyznaczania konkretnych wartości posłużymy się notowaniami otwarcia dla każdego dnia; w szczególności, korzystamy z następujących wzorów:
 $$
@@ -122,6 +122,97 @@ rownames(drift_vol_estimates) <- c("mu", "sigma")
 ```
 
 Porównując otrzymane wartości z wcześniej omawianym wykresem notowań indeksu WIG20 łatwo zauważyć skąd się bierze ich zmiana, a w szczególności spadek wartości estymatora $\mu$ wraz z wydłużaniem okresu estymacji - biorąc zwroty z kolejnych lat przed 2021 rokiem, uwzględniamy okres, w którym nie tylko miał miejsce duży spadek wartości indeksu w ogóle (pandemia COVID-19), ale również trend zmian indeksu był negatywny (okres przed 2020).
+
+```{r, echo=FALSE, cache = TRUE, fig.width=12, fig.height=8}
+dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+dane_2021_zwroty <- dane_2021_zwroty[is.finite(dane_2021_zwroty)]
+
+dane_2020_zwroty <- wig20_data %>% filter(year(Data) %in% c(2020, 2021)) %>% pull(Zwrot)
+dane_2020_zwroty <- dane_2020_zwroty[is.finite(dane_2020_zwroty)]
+
+dane_2019_zwroty <- wig20_data %>% filter(year(Data) %in% c(2019, 2020, 2021)) %>% pull(Zwrot)
+dane_2019_zwroty <- dane_2019_zwroty[is.finite(dane_2019_zwroty)]
+
+dane_2018_zwroty <- wig20_data %>% filter(year(Data) %in% c(2018, 2019, 2020, 2021)) %>% pull(Zwrot)
+dane_2018_zwroty <- dane_2018_zwroty[is.finite(dane_2018_zwroty)]
+
+dane_list = list(
+  dane_2021_zwroty,
+  dane_2020_zwroty,
+  dane_2019_zwroty,
+  dane_2018_zwroty
+)
+
+params_list = list(
+  c(mean(dane_list[[1]]), sd(dane_list[[1]])),
+  c(mean(dane_list[[2]]), sd(dane_list[[2]])),
+  c(mean(dane_list[[3]]), sd(dane_list[[3]])),
+  c(mean(dane_list[[4]]), sd(dane_list[[4]]))
+)
+
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+pnorm_data_list = list(
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[1]][1], sd = params_list[[1]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[2]][1], sd = params_list[[2]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[3]][1], sd = params_list[[3]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[4]][1], sd = params_list[[4]][2]))
+)
+
+title_details = c('2021', '2020-2021', '2019-2021', '2018-2021')
+hists_list = list()
+for (i in 1:4) {
+  hists_list[[i]] = ggplot() +
+    geom_histogram(aes(x = dane_list[[i]], y = after_stat(density)), 
+                   bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
+    geom_line(data = pnorm_data_list[[i]], aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+    coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+    labs(title = "Zwroty historyczne WIG20", subtitle = paste("Okres: ", title_details[i]), 
+         x = "Zwrot", y = "Gęstość") +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+          plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+  
+}
+
+(hists_list[[1]] | hists_list[[2]] ) / (hists_list[[3]] | hists_list[[4]])
+```
+
+(wykresy normalności zwrotów historycznych, wnioski - tylko w pierwszym przypadku widzimy dobre dopasowanie, w pozostałych przypadkach ciężkie ogony mocno wpływają na wariancję)
+
+```{r, echo=FALSE, cache = TRUE}
+shapiro_tests = list(
+  shapiro.test(dane_list[[1]]),
+  shapiro.test(dane_list[[2]]),
+  shapiro.test(dane_list[[3]]),
+  shapiro.test(dane_list[[4]])
+)
+
+
+format_pvalue <- function(p) {
+  if (p < 0.0001) {
+    format(p, scientific = TRUE, digits = 2)
+  } else {
+    round(p, 4)
+  }
+}
+
+results <- data.frame(
+  Dane = c("Zwroty historyczne (2021)", "Zwroty historyczne (2020-2021)", "Zwroty historyczne (2019-2021)", "Zwroty historyczne (2018-2021)"),
+  p_value = c(format_pvalue(shapiro_tests[[1]]$p.value), format_pvalue(shapiro_tests[[2]]$p.value), format_pvalue(shapiro_tests[[3]]$p.value), format_pvalue(shapiro_tests[[4]]$p.value)),
+  Wniosek = c(
+    ifelse(shapiro_tests[[1]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[2]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[3]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[4]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0")
+  )
+)
+
+kable(results, 
+      col.names = c("Dane", "p-value", "Wniosek (alfa = 0.05)"),
+      caption = "Test Shapiro-Wilka normalności rozkładu zwrotów (4 okresy)")
+
+```
+
 
 ## Symulacja zmian cen indeksu WIG20
 
@@ -922,13 +1013,61 @@ W związku z tym, takie podejście do symulacji może skutkować lepszymi rezult
 
 ## Symulacje notowań indeksu WIG20 i akcji KGHM jako przykład dwóch skorelowanych aktywów
 
+```{r, echo=FALSE, cache = TRUE}
+# Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
+# ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
+# mozemy pozniej usunac)
+kghm_data <- read_csv('kgh_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+kghm_data <- kghm_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+kghm_data$Zwrot[1] <- 0
+
+wig_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+
+wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
+kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
+
+dane_kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+dane_kghm_2021_zwroty <- dane_kghm_2021_zwroty[is.finite(dane_kghm_2021_zwroty)]
+
+dane_kghm_2020_zwroty <- kghm_data %>% filter(year(Data) %in% c(2020, 2021)) %>% pull(Zwrot)
+dane_kghm_2020_zwroty <- dane_kghm_2020_zwroty[is.finite(dane_kghm_2020_zwroty)]
+
+dane_kghm_2019_zwroty <- kghm_data %>% filter(year(Data) %in% c(2019, 2020, 2021)) %>% pull(Zwrot)
+dane_kghm_2019_zwroty <- dane_kghm_2019_zwroty[is.finite(dane_kghm_2019_zwroty)]
+
+dane_kghm_2018_zwroty <- kghm_data %>% filter(year(Data) %in% c(2018, 2019, 2020, 2021)) %>% pull(Zwrot)
+dane_kghm_2018_zwroty <- dane_kghm_2018_zwroty[is.finite(dane_kghm_2018_zwroty)]
+
+results <- data.frame(
+  cor_est = "$\\hat{\\rho}$",
+  cor1 = cor(dane_kghm_2021_zwroty, dane_2021_zwroty),
+  cor2 = cor(dane_kghm_2020_zwroty, dane_2020_zwroty),
+  cor3 = cor(dane_kghm_2019_zwroty, dane_2019_zwroty),
+  cor4 = cor(dane_kghm_2018_zwroty, dane_2018_zwroty)
+)
+```
+
 W tym krótkim podrozdziale zajmiemy się przedstawieniem interesującego zjawiska - korelacji notowań dwóch różnych aktywów. Jednym z nich jest omawiany już indeks WIG20, a drugim - akcje spółki KGHM. Ze względu na fakt, że akcje spółki KGHM wchodzą w skład indeksu WIG20 naturalnym jest oczekiwanie, że wzrost lub spadek notowań akcji KGHM będzie miało bezpośredni wpływ na notowania indeksu WIG20. Mniej oczywistym może być fakt, że podobna relacja zachodzi również w drugą stronę - replikując indeks WIG20 (tj. jego sklad, bo samym indeksem handlować nie można) handluje się w efekcie akcjami KGHM, co wpływa na ich cenę.
 
 Podstawową miarą powiązania dwóch aktywów jest współczynnik korelacji Pearsona, szeroko stosowany nie tylko w analizie rynków finansowych; obliczamy go biorąc jako zmienne dzienne zwroty obu aktywów, czyli korzystamy z następującego wzoru:
 $$
 \hat{\rho} = \dfrac{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(2)})(R_i^{(2)} - \overline{R}_i^{(1)})}{\sqrt{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(1)})^2 \sum_{i = 1}^n (R_i^{(2)} - \overline{R}_i^{(2)})^2}} = \dfrac{\hat{\text{Cov}}(R^{(1)}, R^{(2)})}{\sqrt{\hat{\sigma}^{(1)}}\sqrt{\hat{\sigma}^{(2)}}}
 $$
-Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z roku 2021 otrzymujemy wartość $\hat{\rho} \approx 0.601$. Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
+Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z wcześniej rozważanych okresów otrzymujemy następujące wartości:
+
+```{r, echo=FALSE, cache = TRUE}
+kable(results, 
+      col.names = c("", "Okres: 2021", "Okres: 2020-2021", "Okres: 2019-2021", "Okres: 2018-2021"),
+      caption = "Współczynniki korelacji zwrotów notowań indeksu WIG20 i notowań akcji KGHM (4 okresy)")
+```
+
+(jakiś komentarz do tego może)
+Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
 
 Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
 
@@ -963,27 +1102,7 @@ correlated_gbm_simulation <- function(S01, mu1, sigma1, S02, mu2, sigma2, p, t, 
 }
 ```
 
-```{r, echo=FALSE, cache = TRUE,}
-# Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
-# ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
-# mozemy pozniej usunac)
-kghm_data <- read_csv('kgh_d.csv') %>%
-  mutate(Data = as.Date(Data)) %>%
-  arrange(Data)
-
-kghm_data <- kghm_data %>%
-  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
-kghm_data$Zwrot[1] <- 0
-
-wig_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
-kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
-
-wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
-kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
-```
-
-
-```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center', cache = TRUE}
 # Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
 # nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
 # to wypadałoby zamienić je na ggplota
@@ -1031,7 +1150,7 @@ cor_plot_1
 
 Na podstawie wykresu możemy zaobserwować, że większość picków pojawia się w podobnych miejscach czasu dla obu aktywów, natomiast widać różnicę pomiędzy wartościami. Może to sugerować, że nie jest to korelacja równa 1 z różnicą co do znaku, ale prawie na pewno możemy wywnioskować, że występuje jakaś korelacja między trajektoriami.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, cache = TRUE}
 correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2, n, M) {
   if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
   N = length(returns_set1)
@@ -1054,7 +1173,7 @@ correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2
 }
 ```
 
-```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center', cache = TRUE}
 # Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
 # nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
 # to wypadałoby zamienić je na ggplota
@@ -1455,7 +1574,7 @@ Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak sko
 
 ## Analiza wpływu częstotliwości re-hedgingu
 
-```{r, include = FALSE}
+```{r, include = FALSE, cache = TRUE}
 #   Funkcja przeprowadzająca algorytm delta-hedgingowy
 #
 #   S0 - wartość aktywa w chwili 0, mu - dryf, sigma - zmienność, r - stopa wolna od ryzyka,
