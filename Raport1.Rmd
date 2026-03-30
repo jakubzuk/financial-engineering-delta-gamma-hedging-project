@@ -1,0 +1,2589 @@
+---
+title: "Delta i gamma hedging"
+author: "Tomasz Kąkol, Mikołaj Pamuła, Jakub Żuk"
+date: "2026-03-07"
+output:
+  pdf_document: 
+      toc: true
+      toc_depth: 3
+  html_document:
+    df_print: paged
+toc-title: Spis treści
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(knitr)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(kableExtra)
+```
+
+```{r, include=FALSE}
+#   Opcja, ktora zapisuje wykresy jako zwykle obrazy
+#   W przeciwnym wypadku wszystko jest zapisywane w formacie grafiki wektorowej,
+#   przez co w samym pdfie laduja sie one bardzo dlugo
+# knitr::opts_chunk$set(dev = "png")
+```
+
+# Wprowadzenie
+
+Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w ramach przedmiotu "Inżynieria finansowa 1". Projekt będzie obracał się w tematyce zabezpieczania opcji waniliowych i składał się z trzech części: 0 (rozgrzewkowa), A oraz B. W części 0 będziemy precyzować niezbędne parametry potrzebne w dalszych częściach (m.in. parametry modelu Blacka-Scholesa), takie jak trajektorie ruchu Browna czy symulacje na podstawie Bootstrapingu. Druga część, tj. część A, będzie opisywała działanie delta hedgingu pojdeynczej opcji na WIG20, gdzie będziemy badać skuteczność naszych naszych parametrów, a w ostatniej części, tj. części B, rozważymy zabezpieczanie poprzez tzw. delta hedging.
+
+\newpage
+
+# Część 0 - Indeks WIG20, Symulacje notowań, Opcje
+
+W tej części zajmiemy się omówieniem większości pojęć pojawiających się w pozostałych dwóch częściach projektu. Rozpoczniemy od przedstawienia instrumentu finansowego będącego w centrum naszego zainteresowania, czyli indeksu giełdowego *WIG20* - omówimy go krótko pod kątem finansowym, po czym przyjrzymy się właściwościom jego notowań na *Warszawskiej Giełdzie Papierów Wartościowych* (GPW); w szczególności, zbadamy rozkład jego dziennych zwrotów i porównamy otrzymane wyniki z modelem, według którego rozwój cen indeksu WIG20 jest pewną realizacją *Geometrycznego Ruchu Browna*. Po dokonaniu tych porównań, przeprowadzimy szereg symulacji (metodą standardową oraz bootstrapową) Geometrycznego Ruchu Browna (parametryzowanego wartościami uzyskanymi na podstawie estymacji danych historycznych indeksu WIG20) i skonfrontujemy wyniki symulacji z faktycznymi notowaniami indeksu; rozważymy również korelację indeksu WIG20 z notowaniami akcji KGHM, którą zoobrazujemy analogicznymi metodami symulacyjnymi. Na koniec, korzystając z przeprowadzonych symulacji oraz danych giełdowych, omówimy opcje (na indeks WIG20) dostępne dla inwestorów na GPW.
+
+## Indeks WIG20
+
+Instrumentem bazowym, z którym będziemy pracować jest indeks WIG20. Obliczany od 16 kwietnia 1994 roku, jest indeksem giełdowym reprezentującym kondycję 20 największych (pod względem kapitalizacji) spółek notowanych na GPW z zastrzeżeniem, że z jednego sektora nie może znaleźć się tam więcej niż 5 spółek; wpływ poszczególnych spółek jest ważony ich kapitalizacją. Wartość indeksu można bezpośrednio wyznaczyć ze wzoru^[Szczegóły dotyczące wyznaczania dokładnej wartości indeksu można uzyskać na stronie internetowej www.gpwbenchmark.pl.]:
+$$
+\text{WIG20} = \dfrac{\sum P_i S_i}{\sum P_i^{(0)} S_i K}I_0
+$$
+gdzie $P_i$ jest kursem $i$-tej spółki (wchodzącej w skład indeksu) na obecnej sesji ($P_i^{(0)}$ jest kursem $i$-tej spółki na sesji bazowej), $S_i$ jest liczbą akcji $i$-tej spółki w obrocie, $K$ współczynnikiem korygującym na danej sesji, a $I_0$ wartością bazową (dla indeksu WIG20 $I_0 = 1000$).
+
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+
+# Wczytanie danych i przekształcenie umożliwiające indeksowanie datami
+wig20_data <- read_csv('wig20_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+# Podstawowe informacje o zbiorze danych
+#glimpse(wig20_data)
+
+# Wykres notowań indeksu dla pełnego okresu (16-04-1991 : 05-03-2026)
+wig20_data %>%
+  filter(Data >= as.Date('2015-01-01')) %>%
+  ggplot(aes(x = Data, y = Otwarcie)) +
+  geom_line(color = "blue") +
+  labs(title = 'Notowania WIG20 od 01.01.2015 do 05.03.2026', 
+       x = "Data", y = "Otwarcie") +
+  theme_minimal()
+
+```
+
+Jak widać, w okresie 2015-2020 indeks WIG20 wykazywał względną stabilność (poza około dwuletnim okresem spadkowym po 2015), a od 2020 charakteryzuje się stabilnym wzrostem, przerwanym dwoma znaczącymi wydarzeniami o ogromnych konsekwencjach gospodarczych, czyli pandemii COVID-19 oraz wybuchu pełnoskalowej wojny na Ukrainie.
+
+## Estymacja dryfu i zmienności indeksu WIG20
+
+Zanim przejdziemy do analizy rozkładu dziennych zwrotów indeksu i symulacji, wyznaczymy wartości tych zwrotów i na ich podstawie wyznaczymy wartości estymatorów dryfu i zmienności - parametry te będą kluczowe podczas symulacji Geometrycznych Ruchów Browna. Do wyznaczania konkretnych wartości posłużymy się notowaniami otwarcia dla każdego dnia; w szczególności, korzystamy z następujących wzorów:
+$$
+R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}}, \;\;\; \hat{\mu} = \frac{1}{n \Delta t}\sum_{i = 1}^nR_i, \;\;\; \hat{\sigma} = \sqrt{\frac{1}{(n - 1) \Delta t}\sum_{i = 1}^n(R_i - \overline{R})^2}
+$$
+gdzie $R_i$ jest $i$-tym zwrotem, $\hat{\mu}$ i $\hat{\sigma}$ są estymatorami odpowiednio dryfu (rocznego) i zmienności (rocznej), a $\Delta t$ 'krokiem czasowym' (dla każdego roku mamy średnio $250$ notowań, czyli średnio $\Delta t = \frac{1}{250}$).
+
+Aby uzyskać wyniki symulacji jak najbardziej pasujące do rzeczywistych notowań, potrzebujemy jak najlepsze oszacowanie wartości parametrów $\mu$ i $\sigma$ - w tym celu, wyznaczymy wartości estymatorów $\hat{\mu}$ i $\hat{\sigma}$ korzystając z dziennych zwrotów indeksu z czterech różnych okresów - końcem każdego z nich jest 31 grudnia 2021 roku, a początkami - 1 stycznia roku 2021, 2020, 2019 i 2018. Dla takich okresów otrzymujemy następujące wartości estymatorów:
+
+
+```{r, echo=FALSE}
+# Wyznaczanie zwrotów i dodanie ich do tabeli z danymi
+wig20_data <- wig20_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+
+# Zastąpienie pierwszego NA zerem (odwzorowanie pythonowego np.concat([[0], ...]))
+wig20_data$Zwrot[1] <- 0
+
+# Teraz tabela danych zawiera równiez kolumnę zawierającą informacje o zwrotach danego dnia
+#kable(tail(wig20_data), digits = 4)
+
+# Wyznaczenie estymatorów dryfu i zmienności (rocznych)
+# w okresach (x : 2021) gdzie x z listy periods (czyli np. dla x = 2019 mamy dane z 01-01-2019 do 31-12-2021)
+periods <- c('2021', '2020', '2019', '2018')
+drift_vol_estimates <- data.frame(matrix(ncol = length(periods), nrow = 2))
+colnames(drift_vol_estimates) <- periods
+rownames(drift_vol_estimates) <- c("mu", "sigma")
+
+for (i in seq_along(periods)) {
+  rok <- periods[i]
+  
+  dane_okres <- wig20_data %>%
+    filter(year(Data) >= as.numeric(rok) & year(Data) <= 2021)
+  
+  n_obs <- nrow(dane_okres)
+  dt <- i / n_obs
+  
+  drift_vol_estimates["mu", rok] <- mean(dane_okres$Zwrot) / dt
+  drift_vol_estimates["sigma", rok] <- sd(dane_okres$Zwrot) / sqrt(dt)
+}
+
+rownames(drift_vol_estimates) <- c("Wartość estymatora $\\hat{\\mu}$", "Wartość estymatora $\\hat{\\sigma}$")
+colnames(drift_vol_estimates) <- c('Okres 1: 2021', 'Okres 2: 2020-2021', 'Okres 3: 2019-2021', 'Okres 4: 2018-2021')
+
+kable(drift_vol_estimates, digits = 4)
+
+colnames(drift_vol_estimates) <- periods
+rownames(drift_vol_estimates) <- c("mu", "sigma")
+```
+
+Porównując otrzymane wartości z wcześniej omawianym wykresem notowań indeksu WIG20 łatwo zauważyć skąd się bierze ich zmiana, a w szczególności spadek wartości estymatora $\mu$ wraz z wydłużaniem okresu estymacji - biorąc zwroty z kolejnych lat przed 2021 rokiem, uwzględniamy okres, w którym nie tylko miał miejsce duży spadek wartości indeksu w ogóle (pandemia COVID-19), ale również trend zmian indeksu był negatywny (okres przed 2020).
+
+## Symulacja zmian cen indeksu WIG20
+
+Po wyznaczeniu wartości estymatorów dryfu i zmienności możemy przejść do symulowania notowań oraz porównania ich z realnymi notowaniami indeksu WIG20. Symulacje przeprowadzimy dwiema metodami - metodą standardową, opartej o założenie, że notowania indeksu są realizacją odpowiednio sparametryzowanego Geometrycznego Ruchu Browna oraz metodą bootstrapową, opartej o losowanie zwrotów z danych historycznych i wykorzystanie ich do konstruowania notowań - szczegóły obu metod zamieszczamy w Dodatku (ostatni rozdział).
+
+Dla obu metod przeprowadzamy cztery osobne szeregi symulacji. Każdy z szeregów związany jest z jednym z okresów zdefiniowanych w poprzednim podrozdziale; w przypadku symulacji wykonanych metodą standardową, symulacja związana z danym okresem oznacza, że korzystamy z wartości estymatorów $\hat{\mu}$ i $\hat{\sigma}$ uzyskanych dla danego okresu, a w przypadku symulacji wykonanych metodą bootstrapową, symulacja związana z danym okresem oznacza, że losujemy zwroty historyczne z danego okresu.
+
+```{r, echo=FALSE}
+# Funkcja zwracająca macierz wysymulowanych ścieżek notowań pewnego instrumentu.
+# W pojedynczej kolumnie pojedyncza realizacji pełnej ścieżki; pojedynczy wiersz
+# zawiera wartość ścieżki w danej chwili okresu
+
+# S0 - wartość początkowa, mu - dryf (roczny), sigma - zmienność (roczna),
+# t - okres, długość ścieżki (w latach), n - liczba 'kroków', tj. podział okresu na części,
+# M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
+gbm_simulation <- function(S0, mu, sigma, t, n, M) {
+  dt <- t / n
+  
+  brownian_increments <- matrix(rnorm(M * n, mean = 0, sd = sqrt(dt)), nrow = M, ncol = n)
+  brownian_increments_transformed <- (mu - sigma^2 / 2) * matrix(rep(1:n, M)*dt, nrow = M, byrow = TRUE) + sigma * t(apply(brownian_increments, 1, cumsum))
+  brownian_increments_transformed <- cbind(rep(1, M), exp(brownian_increments_transformed))
+  
+  simulated_price_paths <- S0 * t(brownian_increments_transformed)
+  
+  return(simulated_price_paths)
+}
+
+```
+
+Rozpoczniemy od przedstawienia wyników symulacji rocznych notowań indeksu porównując je z faktycznymi notowaniami z roku 2022 - przeanalizujemy różnice między nimi, chcąc zweryfikować czy owe faktyczne notowania są 'typową' realizacją wysymulowanych procesów, czy może są znacząco odstające; zbadamy również rozkłady ich zwrotów, w szczególności sprawdzając, czy spełniają one założenie o normalności. Następnie, dokonamy analogicznej analizy i porównań dla symulacji na dwa lata wprzód porównując je z notowaniami z okresu 2022-2023.
+
+### Symulacje notowań indeksu WIG20 na rok 2022
+
+Zaczniemy od przeanalizowaniu wykresów symulacji notowań indeksu uwzględniając ich krzywe kwantylowe oraz notowania indeksu z roku 2022; następnie przejdziemy do histogramów zwrotów dziennych z wysymulowanych trajektorii i porównania ich z rozkładem zwrotów dziennych z faktycznych notowań.
+
+```{r gbm_simulations_2022, echo=FALSE, fig.width=7, fig.height=6, out.width="100%", cache=TRUE}
+# Parametry t, n, M dla poniższych symulacji
+T_val <- 1
+n <- 250
+M <- 10000
+
+# Podział okresu symulowanych ścieżek
+time_seq <- seq(0, T_val, length.out = n + 1)
+
+# Wartość początkowa indeksu dla symulowanych ścieżek
+dane_2022 <- wig20_data %>% filter(year(Data) == 2022)
+S0 <- dane_2022$Otwarcie[1]
+
+# Symulacje
+simulations <- list(
+  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2020"], drift_vol_estimates["sigma", "2020"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
+)
+```
+
+```{r gbm_chart_2022, echo=FALSE, cache=TRUE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300}
+title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
+reset = 4
+# Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
+plot_simulation_panel <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.01, linewidth = 0.1)  +
+    scale_y_continuous(limits = c(min = 1000, max = 5500)) + #  trochę prymitywnie, ale na razie dodaje ograniczeia na osi Y 'z palca'
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Estymacja z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# Tworzenie 4 wykresów
+p1 <- plot_simulation_panel(simulations[[1]], title_descriptions_details[1], dane_2022)
+p2 <- plot_simulation_panel(simulations[[2]], title_descriptions_details[2], dane_2022)
+p3 <- plot_simulation_panel(simulations[[3]], title_descriptions_details[3], dane_2022)
+p4 <- plot_simulation_panel(simulations[[4]], title_descriptions_details[4], dane_2022)
+
+# Wspólna legenda
+legend_plot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(p1 | p2) / (p3 | p4) / legend_plot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje GBM notowań WIG20 na rok 2022",
+    subtitle = "Porównanie symulacji z różnymi okresami estymacji dryfu i zmienności",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+Jak widzimy, w każdym z powyższych przypadków faktyczne notowania indeksu z roku 2022 odstają od 'typowych' wysymulowanych trajektorii - w każdym z przypadków końcowa wartość indeksu leży znacznie poniżej mediany (w przypadku pierwszego okresu, najkrótszego, nawet poniżej kwantyla pięcioprocentowego) i większość notowań oscyluje wokół krzywej kwantylowej pięcioprocentowej. Jeśli chodzi o trajektorie samych symulacji, to warty odnotowania jest fakt, że najmniejszy rozrzut końcowych wartości symulowanych notowań widzimy w przypadku okresu pierwszego, a największy - w przypadku okresu drugiego; nie powinno to być zaskoczeniem, jeśli spojrzy się ponownie na tabelę wyestymowanych wartości parametru $\sigma$ - to właśnie w przypadku okresu pierwszego wartość ta była najmniejsza, a w przypadku okresu drugiego - największa.
+
+```{r, echo=FALSE}
+# Funkcja zwracająca macierz wysymulowanych ścieżek notowań pewnego instrumentu.
+# W pojedynczej kolumnie pojedyncza realizacji pełnej ścieżki; pojedynczy wiersz
+# zawiera wartość ścieżki w danej chwili okresu
+
+# S0 - wartość początkowa, returns_set - zbiór zwrotów historycznych, które będziemy losować
+# w celu wyznaczenia trajektorii notowań
+# n - liczba 'kroków', tj. podział okresu na części,
+# M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
+
+bootstrap_simulation <- function(S0, returns_set, n, M) {
+  sampled_increments <- matrix(sample(returns_set, size = M * n, replace = TRUE), nrow = M, ncol = n)
+  sampled_increments_transformed <- cbind(rep(1, M), 1 + sampled_increments)
+  simulated_price_paths <- S0 * t(apply(sampled_increments_transformed, 1, cumprod))
+  
+  return(t(simulated_price_paths))
+}
+```
+
+```{r bootstrap_simulations_2022, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+reset = 2
+ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
+ret_2019_2021 <- wig20_data %>% filter(year(Data) %in% 2019:2021) %>% pull(Zwrot)
+ret_2018_2021 <- wig20_data %>% filter(year(Data) %in% 2018:2021) %>% pull(Zwrot)
+
+# Symulacje bootstrapowe
+bootstrap_simulations_list <- list(
+  bootstrap_simulation(S0, ret_2021, n, M),
+  bootstrap_simulation(S0, ret_2020_2021, n, M),
+  bootstrap_simulation(S0, ret_2019_2021, n, M),
+  bootstrap_simulation(S0, ret_2018_2021, n, M)
+)
+```
+
+```{r bootstrap_chart_2022, echo=FALSE, fig.width=12, fig.height=10, dev="png", dpi=300, cache=TRUE}
+reset = 3
+# Funkcja do wykresów bootstrap ##
+plot_boot_panel <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.01, linewidth = 0.1) +
+    scale_y_continuous(limits = c(min = 1000, max = 5500)) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Bootstrap z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# Tworzenie 4 wykresów bootstrap
+b1 <- plot_boot_panel(bootstrap_simulations_list[[1]], title_descriptions_details[1], dane_2022)
+b2 <- plot_boot_panel(bootstrap_simulations_list[[2]], title_descriptions_details[2], dane_2022)
+b3 <- plot_boot_panel(bootstrap_simulations_list[[3]], title_descriptions_details[3], dane_2022)
+b4 <- plot_boot_panel(bootstrap_simulations_list[[4]], title_descriptions_details[4], dane_2022)
+
+# Wspólna legenda
+legend_plot_boot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(b1 | b2) / (b3 | b4) / legend_plot_boot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje Bootstrap notowań WIG20 na rok 2022",
+    subtitle = "Porównanie symulacji z różnymi okresami losowania zwrotów",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+Analizując wykresy symulacji przeprowadzonych metodą bootstrapową dochodzimy do analogicznych wniosków jak w przypadku poprzednim - również w każdym z czterech przypadków końcowa wartość indeksu leży wyraźnie poniżej mediany (w przypadku pierwszego okresu, ponownie, nawet poniżej kwantyla pięcioprocentowego) i większość notowań oscyluje wokół krzywej kwantylowej pięcioprocentowej. Obserwacje dotyczące rozrzutu końcowych wartości symulowanych notowań są również podobne; w przypadku okresu pierwszego rozrzut jest najmniejszy, a w przypadku drugiego - największy.
+
+```{r, results='asis', include=FALSE}
+cat("\\paragraph{Podsumowanie predykcji na 1 rok}\n")
+```
+
+```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+reset = 3
+dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+dane_2021_zwroty <- dane_2021_zwroty[is.finite(dane_2021_zwroty)]
+
+# Zwroty z symulacji GBM
+sim_mat <- simulations[[1]]
+sim_returns <- as.vector((sim_mat[-1, ] - sim_mat[-nrow(sim_mat), ]) / sim_mat[-nrow(sim_mat), ])
+sim_returns <- sim_returns[is.finite(sim_returns)]
+
+# Zwroty z symulacji Bootstrap
+boot_mat <- bootstrap_simulations_list[[1]]
+boot_returns <- as.vector((boot_mat[-1, ] - boot_mat[-nrow(boot_mat), ]) / boot_mat[-nrow(boot_mat), ])
+boot_returns <- boot_returns[is.finite(boot_returns)]
+
+# Zakres x wspólny
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+
+# Krzywa normalna dla HISTORYCZNYCH (2022)
+mu_hist <- mean(dane_2022$Zwrot, na.rm = TRUE)
+sd_hist <- sd(dane_2022$Zwrot, na.rm = TRUE)
+p_norm_hist <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_hist, sd = sd_hist))
+
+# Krzywa normalna dla GBM
+mu_sim <- mean(sim_returns)
+sd_sim <- sd(sim_returns)
+p_norm_sim <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_sim, sd = sd_sim))
+
+# Krzywa normalna dla BOOTSTRAP
+mu_boot <- mean(boot_returns)
+sd_boot <- sd(boot_returns)
+p_norm_boot <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_boot, sd = sd_boot))
+
+# Histogram 1: Historyczne
+hist1 <- ggplot() +
+  geom_histogram(aes(x = dane_2022$Zwrot, y = after_stat(density)), 
+                 bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
+  geom_line(data = p_norm_hist, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty historyczne WIG20", subtitle = "Okres: 2021", 
+       x = "Zwrot", y = "Gęstość") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# Histogram 2: GBM
+hist2 <- ggplot() +
+  geom_histogram(aes(x = sim_returns, y = after_stat(density)), 
+                 bins = 30, fill = "#4ECDC4", color = "#00A896", alpha = 0.8) +
+  geom_line(data = p_norm_sim, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty symulowane GBM", subtitle = "Symulacja na rok 2022", 
+       x = "Zwrot", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#00A896", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# Histogram 3: Bootstrap
+hist3 <- ggplot() +
+  geom_histogram(aes(x = boot_returns, y = after_stat(density)), 
+                 bins = 30, fill = "#9B59B6", color = "#7D3C98", alpha = 0.8) +
+  geom_line(data = p_norm_boot, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty symulowane Bootstrap", subtitle = "Symulacja na rok 2022", 
+       x = "Zwrot", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#7D3C98", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+hist1 | hist2 | hist3
+```
+
+Wstępna ocena histogramów wskazuje na gaussowskość rozkładu zarówno zwrotów historycznych, jak i symulowanych przy pomocy geometrycznego ruchu Browna. Ilustruje to krzywa gęstości rozkładu normalnego na wykresach, jednak aby móc wydać taki osąd potrzebujemy narzędzi statystycznych, testu Shapiro-Wilka.
+
+$H_0$: Dane pochodzą z rozkładu normalnego \qquad $H_1$: Dane nie pochodzą z rozkładu normalnego
+
+```{r return_shapiro_2022, echo=FALSE, cache=TRUE}
+reset = 3
+# Test dla danych historycznych
+shapiro_hist <- shapiro.test(dane_2022$Zwrot)
+
+# Test dla GBM - próbka tej samej wielkości
+set.seed(123)
+sim_returns_sample <- sample(sim_returns, length(dane_2021_zwroty))
+shapiro_sim <- shapiro.test(sim_returns_sample)
+
+# Test dla Bootstrap - próbka tej samej wielkości
+set.seed(123)
+boot_returns_sample <- sample(boot_returns, length(dane_2021_zwroty))
+shapiro_boot <- shapiro.test(boot_returns_sample)
+
+# Funkcja formatowania p-value
+format_pvalue <- function(p) {
+  if (p < 0.0001) {
+    format(p, scientific = TRUE, digits = 2)
+  } else {
+    round(p, 4)
+  }
+}
+
+# Tabela wyników
+results <- data.frame(
+  Dane = c("Zwroty historyczne (2022)", "Zwroty GBM (próbka)", "Zwroty Bootstrap (próbka)"),
+
+  p_value = c(format_pvalue(shapiro_hist$p.value), format_pvalue(shapiro_sim$p.value), format_pvalue(shapiro_boot$p.value)),
+  Wniosek = c(
+    ifelse(shapiro_hist$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_sim$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_boot$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0")
+  )
+)
+
+kable(results, 
+      col.names = c("Dane", "p-value", "Wniosek (alfa = 0.05)"),
+      caption = "Test Shapiro-Wilka normalności rozkładu zwrotów (1 rok)")
+```
+
+```{r return_qq_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+reset = 3
+# QQ-plot 1: Historyczne
+qq1 <- ggplot(data.frame(x = dane_2022$Zwrot), aes(sample = x)) +
+  stat_qq(color = "#FF6B6B", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty historyczne", subtitle = "Okres: 2022",
+       x = "Kwantyle teoretyczne", y = "Kwantyle empiryczne") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# QQ-plot 2: GBM (próbka)
+qq2 <- ggplot(data.frame(x = sim_returns_sample), aes(sample = x)) +
+  stat_qq(color = "#4ECDC4", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty GBM", subtitle = paste0("Próbka n = ", length(sim_returns_sample)),
+       x = "Kwantyle teoretyczne", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#00A896", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# QQ-plot 3: Bootstrap (próbka)
+qq3 <- ggplot(data.frame(x = boot_returns_sample), aes(sample = x)) +
+  stat_qq(color = "#9B59B6", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty Bootstrap", subtitle = paste0("Próbka n = ", length(boot_returns_sample)),
+       x = "Kwantyle teoretyczne", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#7D3C98", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+qq1 | qq2 | qq3
+```
+
+Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów historycznych oraz zwrotów z trajektorii symulacji przeprowadzonych metodą standardową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych - w przypadku zwrotów bootstrapowych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc ... .
+
+### Symulacje notowań indeksu WIG20 na okres 2022-2023
+
+Przejdziemy teraz do symulacji notowań indeksu WIG20 w okresie dwuletnim - podobnie jak w przypadku symulacji na rok 2022, rozpoczniemy od analizy wykresów symulacji notowań indeksu uwzględniając ich krzywe kwantylowe oraz notowania indeksu z okresu 2022-2023, a następnie przejdziemy do analizy rozkładów zwrotów dziennych z wysymulowanych trajektorii i porównania ich z rozkładem zwrotów dziennych z faktycznych notowań indeksu.
+
+```{r, echo=FALSE}
+reset = 3
+T_val <- 2
+n <- 500  # 250 dni * 2 lata
+#M <- 1000 (ten parametr można globalnie zmienic wyzej)
+
+# Podział okresu symulowanych ścieżek
+time_seq <- seq(0, T_val, length.out = n + 1)
+```
+
+```{r gbm_simulations_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
+reset = 5
+# Parametry t, n, M dla poniższych symulacji - 2 LATA
+T_val <- 2
+n <- 500  # 250 dni * 2 lata
+#M <- 1000 (ten parametr można globalnie zmienic wyzej)
+##
+# Podział okresu symulowanych ścieżek
+time_seq <- seq(0, T_val, length.out = n + 1)
+
+# Wartość początkowa indeksu dla symulowanych ścieżek
+dane_2022_2023 <- wig20_data %>% filter(year(Data) %in% c(2022, 2023))
+S0 <- dane_2022_2023$Otwarcie[1]
+
+# Symulacje na 2 lata
+simulations_2y <- list(
+  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, 10000),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2020"], drift_vol_estimates["sigma", "2020"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
+)
+```
+
+```{r gbm_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
+title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
+reset = 3
+# Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
+plot_simulation_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>% 
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+  
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+  
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+  
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
+              color = "black", alpha = 0.01, linewidth = 0.1) +
+    scale_y_continuous(limits = c(min = 1000, max = 6000)) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022-2023"), 
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"), 
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"), 
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "", 
+      values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+                 "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Estymacja z okresu:", title_suffix),
+      x = "Czas (lata)", 
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# Tworzenie 4 wykresów
+p1 <- plot_simulation_panel_2y(simulations_2y[[1]], title_descriptions_details[1], dane_2022_2023)
+p2 <- plot_simulation_panel_2y(simulations_2y[[2]], title_descriptions_details[2], dane_2022_2023)
+p3 <- plot_simulation_panel_2y(simulations_2y[[3]], title_descriptions_details[3], dane_2022_2023)
+p4 <- plot_simulation_panel_2y(simulations_2y[[4]], title_descriptions_details[4], dane_2022_2023)
+
+# Wspólna legenda
+legend_plot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022-2023"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "", 
+    values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red", 
+               "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(p1 | p2) / (p3 | p4) / legend_plot + 
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje GBM notowań WIG20 na lata 2022-2023",
+    subtitle = "Porównanie symulacji z różnymi okresami estymacji dryfu i zmienności",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+Jak widać, symulacje na okres dwuletni wydają się być znacznie lepiej dopasowane do faktycznych notowań indeksu z okresu 2022-2023, w porównaniu do symulacji jakie przeprowadziliśmy na sam rok 2022 - widzimy, że w przypadku trzech z czterech okresów końcowa wartość faktycznych notowań znajduje się w pobliżu mediany trajektorii symulacji; drugim pozytywnym znakiem jest fakt, że we wszystkich czterech okresach po pierwszym roku symulacji faktyczne notowania indeksu z roku 2023 znajdują się powyżej krzywej kwantylowej pięcioprocentowej. Analizując same wyniki symulacji, jedna rzecz wyraźnie rzuca się w oczy - symulacje odpowiadające okresowi pierwszemu (sam rok 2021) mają zauważalną tendencję wzrostową w porównaniu do pozostałych trzech okresów; widać to szczególnie przy krzywej mediany, która ma dodatnie nachylenie względem osi poziomej.
+
+```{r bootstrap_simulations_2022_2023, echo=FALSE, cache=TRUE}
+reset = 6
+# Zbiory zwrotów
+ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
+ret_2019_2021 <- wig20_data %>% filter(year(Data) %in% 2019:2021) %>% pull(Zwrot)
+ret_2018_2021 <- wig20_data %>% filter(year(Data) %in% 2018:2021) %>% pull(Zwrot)
+##
+# Symulacje bootstrapowe na 2 lata
+bootstrap_simulations_2y <- list(
+  bootstrap_simulation(S0, ret_2021, n, 1000),
+  bootstrap_simulation(S0, ret_2020_2021, n, 1000),
+  bootstrap_simulation(S0, ret_2019_2021, n, 1000),
+  bootstrap_simulation(S0, ret_2018_2021, n, 1000)
+)
+```
+
+```{r bootstrap_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+reset = 6
+# Funkcja do wykresów bootstrap
+plot_boot_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
+  df_sim <- as.data.frame(sim_matrix) %>%
+    mutate(time = time_seq) %>%
+    pivot_longer(cols = -time, names_to = "sim", values_to = "price")
+
+  actual_time <- seq(0, T_val, length.out = nrow(actual_data))
+  df_actual <- data.frame(time = actual_time, price = actual_data$Otwarcie)
+
+  df_q <- data.frame(
+    time = time_seq,
+    q05 = apply(sim_matrix, 1, quantile, probs = 0.05),
+    med = apply(sim_matrix, 1, median),
+    q95 = apply(sim_matrix, 1, quantile, probs = 0.95)
+  )
+
+  ggplot() +
+    geom_line(data = df_sim, aes(x = time, y = price, group = sim),
+              color = "black", alpha = 0.01, linewidth = 0.1) +
+    scale_y_continuous(limits = c(min = 1000, max = 6000)) +
+    geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022-2023"),
+              linewidth = 1) +
+    geom_line(data = df_q, aes(x = time, y = q05, color = "Kwantyl 0.05"),
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = med, color = "Mediana"),
+              linewidth = 1, alpha = 0.8) +
+    geom_line(data = df_q, aes(x = time, y = q95, color = "Kwantyl 0.95"),
+              linewidth = 1, alpha = 0.8) +
+    scale_color_manual(
+      name = "",
+      values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red",
+                 "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+    ) +
+    labs(
+      title = paste("Bootstrap z okresu:", title_suffix),
+      x = "Czas (lata)",
+      y = "Cena"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+}
+##
+# Tworzenie 4 wykresów bootstrap
+b1 <- plot_boot_panel_2y(bootstrap_simulations_2y[[1]], title_descriptions_details[1], dane_2022_2023)
+b2 <- plot_boot_panel_2y(bootstrap_simulations_2y[[2]], title_descriptions_details[2], dane_2022_2023)
+b3 <- plot_boot_panel_2y(bootstrap_simulations_2y[[3]], title_descriptions_details[3], dane_2022_2023)
+b4 <- plot_boot_panel_2y(bootstrap_simulations_2y[[4]], title_descriptions_details[4], dane_2022_2023)
+
+# Wspólna legenda
+legend_plot_boot <- ggplot() +
+  geom_line(aes(x = 1, y = 1, color = "WIG20 2022-2023"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.05"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Mediana"), linewidth = 1.2) +
+  geom_line(aes(x = 1, y = 1, color = "Kwantyl 0.95"), linewidth = 1.2) +
+  scale_color_manual(
+    name = "",
+    values = c("WIG20 2022-2023" = "green4", "Kwantyl 0.05" = "red",
+               "Mediana" = "deepskyblue", "Kwantyl 0.95" = "red")
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+# Układ 2x2 + legenda na dole + WSPÓLNY TYTUŁ
+(b1 | b2) / (b3 | b4) / legend_plot_boot +
+  plot_layout(heights = c(1, 1, 0.15)) +
+  plot_annotation(
+    title = "Symulacje Bootstrap notowań WIG20 na lata 2022-2023",
+    subtitle = "Porównanie symulacji z różnymi okresami losowania zwrotów",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+Ponownie, wykresy symulacji przeprowadzonych metodą bootstrapową mają podobne własności do tych odpowiadających symulacjom przeprowadzonym metodą standardową; również w tym przypadku widzimy lepsze dopasowanie symulacji do faktycznych notowań niż w przypadku symulacji na sam rok 2022 - widzimy to obserwując rozmieszczenie faktycznych notowań względem krzywej mediany i krzywej kwantylowej pięcioprocentowej. Analogiczna jest też tendencja wzrostowa symulacji dla okresu pierwszego - widzimy wyraźną różnicę w nachyleniu mediany w porównaniu do pozostałych okresów.
+
+```{r return_histogram_2022_2023, echo=FALSE, fig.width=12, fig.height=4, cache=TRUE}
+reset = 2
+# Dane historyczne (2022-2023)
+dane_2022_2023_zwroty <- wig20_data %>% filter(year(Data) %in% c(2022, 2023)) %>% pull(Zwrot)
+dane_2022_2023_zwroty <- dane_2022_2023_zwroty[is.finite(dane_2022_2023_zwroty)]
+
+# Zwroty z symulacji GBM (2 lata)
+sim_mat_2y <- simulations_2y[[1]]
+sim_returns_2y <- as.vector((sim_mat_2y[-1, ] - sim_mat_2y[-nrow(sim_mat_2y), ]) / sim_mat_2y[-nrow(sim_mat_2y), ])
+sim_returns_2y <- sim_returns_2y[is.finite(sim_returns_2y)]
+
+# Zwroty z symulacji Bootstrap (2 lata)
+boot_mat_2y <- bootstrap_simulations_2y[[1]]
+boot_returns_2y <- as.vector((boot_mat_2y[-1, ] - boot_mat_2y[-nrow(boot_mat_2y), ]) / boot_mat_2y[-nrow(boot_mat_2y), ])
+boot_returns_2y <- boot_returns_2y[is.finite(boot_returns_2y)]
+
+# Zakres x wspólny
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+
+# Krzywa normalna dla HISTORYCZNYCH
+mu_hist <- mean(dane_2022_2023_zwroty)
+sd_hist <- sd(dane_2022_2023_zwroty)
+p_norm_hist <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_hist, sd = sd_hist))
+
+# Krzywa normalna dla GBM
+mu_sim <- mean(sim_returns_2y)
+sd_sim <- sd(sim_returns_2y)
+p_norm_sim <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_sim, sd = sd_sim))
+
+# Krzywa normalna dla BOOTSTRAP
+mu_boot <- mean(boot_returns_2y)
+sd_boot <- sd(boot_returns_2y)
+p_norm_boot <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_boot, sd = sd_boot))
+
+# Histogram 1: Historyczne
+hist1 <- ggplot() +
+  geom_histogram(aes(x = dane_2022_2023_zwroty, y = after_stat(density)), 
+                 bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
+  geom_line(data = p_norm_hist, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty historyczne WIG20", subtitle = "Okres: 2022-2023", 
+       x = "Zwrot", y = "Gęstość") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# Histogram 2: GBM
+hist2 <- ggplot() +
+  geom_histogram(aes(x = sim_returns_2y, y = after_stat(density)), 
+                 bins = 30, fill = "#4ECDC4", color = "#00A896", alpha = 0.8) +
+  geom_line(data = p_norm_sim, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty symulowane GBM", subtitle = "Symulacja na lata 2022-2023", 
+       x = "Zwrot", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#00A896", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# Histogram 3: Bootstrap
+hist3 <- ggplot() +
+  geom_histogram(aes(x = boot_returns_2y, y = after_stat(density)), 
+                 bins = 30, fill = "#9B59B6", color = "#7D3C98", alpha = 0.8) +
+  geom_line(data = p_norm_boot, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+  labs(title = "Zwroty symulowane Bootstrap", subtitle = "Symulacja na lata 2022-2023", 
+       x = "Zwrot", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#7D3C98", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+hist1 | hist2 | hist3
+```
+
+```{r return_shapiro_2022_2023, echo=FALSE, cache=TRUE}
+reset = 2
+# Test dla danych historycznych
+shapiro_hist_2y <- shapiro.test(dane_2022_2023_zwroty)
+
+# Test dla GBM - próbka tej samej wielkości
+set.seed(123)
+sim_returns_2y_sample <- sample(sim_returns_2y, length(dane_2022_2023_zwroty))
+shapiro_sim_2y <- shapiro.test(sim_returns_2y_sample)
+
+# Test dla Bootstrap - próbka tej samej wielkości
+set.seed(123)
+boot_returns_2y_sample <- sample(boot_returns_2y, length(dane_2022_2023_zwroty))
+shapiro_boot_2y <- shapiro.test(boot_returns_2y_sample)
+
+# Funkcja formatowania p-value
+format_pvalue <- function(p) {
+  if (p < 0.0001) {
+    format(p, scientific = TRUE, digits = 2)
+  } else {
+    round(p, 4)
+  }
+}
+
+# Tabela wyników
+results_2y <- data.frame(
+  Dane = c("Zwroty historyczne (2022-2023)", "Zwroty GBM (próbka)", "Zwroty Bootstrap (próbka)"),
+
+  p_value = c(format_pvalue(shapiro_hist_2y$p.value), format_pvalue(shapiro_sim_2y$p.value), format_pvalue(shapiro_boot_2y$p.value)),
+  Wniosek = c(
+    ifelse(shapiro_hist_2y$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_sim_2y$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_boot_2y$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0")
+  )
+)
+
+kable(results_2y, 
+      col.names = c("Dane", "p-value", "Wniosek (alfa = 0.05)"),
+      caption = "Test Shapiro-Wilka normalności rozkładu zwrotów (2 lata)")
+```
+
+```{r return_qq_2022_2023, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
+reset = 2
+# QQ-plot 1: Historyczne
+qq1 <- ggplot(data.frame(x = dane_2022_2023_zwroty), aes(sample = x)) +
+  stat_qq(color = "#FF6B6B", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty historyczne", subtitle = "Okres: 2022-2023",
+       x = "Kwantyle teoretyczne", y = "Kwantyle empiryczne") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# QQ-plot 2: GBM (próbka)
+qq2 <- ggplot(data.frame(x = sim_returns_2y_sample), aes(sample = x)) +
+  stat_qq(color = "#4ECDC4", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty GBM", subtitle = paste0("Próbka n = ", length(sim_returns_2y_sample)),
+       x = "Kwantyle teoretyczne", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#00A896", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+# QQ-plot 3: Bootstrap (próbka)
+qq3 <- ggplot(data.frame(x = boot_returns_2y_sample), aes(sample = x)) +
+  stat_qq(color = "#9B59B6", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#2D3436", linewidth = 1) +
+  labs(title = "QQ-plot: Zwroty Bootstrap", subtitle = paste0("Próbka n = ", length(boot_returns_2y_sample)),
+       x = "Kwantyle teoretyczne", y = "") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(size = 12, face = "bold", color = "#7D3C98", hjust = 0.5),
+        plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+
+qq1 | qq2 | qq3
+```
+
+Zgodnie z budowa modelu, symulacja metodą GBM do predykcji dwuletniej ma log-zwroty o rozkładzie normalnym co tym razem nie jest jednak cechą pożądaną, gdyż dane historyczne znacząco odbiegają od tego modelu.
+
+Metoda symulacji bootstrapowa dla predykcji dwuletnich odbiega od rozkładu normalnego (chociaż mniej niż dane historyczne). Warto zwrócić uwagę, że rozbieżności względem prostej odpowiadającej rozkładowi normalnemu są symetryczne dla danych historycznych i bootstrapowych (przeszacowane dla wyższych kwantyli i niedoszacowane dla niższych). 
+
+W związku z tym, takie podejście do symulacji może skutkować lepszymi rezultatami, chociaż rzeczywiste dane cechują się dużo cięższymi ogonami niż oba warianty symulacyjne.
+
+## Symulacje notowań indeksu WIG20 i akcji KGHM jako przykład dwóch skorelowanych aktywów
+
+W tym krótkim podrozdziale zajmiemy się przedstawieniem interesującego zjawiska - korelacji notowań dwóch różnych aktywów. Jednym z nich jest omawiany już indeks WIG20, a drugim - akcje spółki KGHM. Ze względu na fakt, że akcje spółki KGHM wchodzą w skład indeksu WIG20 naturalnym jest oczekiwanie, że wzrost lub spadek notowań akcji KGHM będzie miało bezpośredni wpływ na notowania indeksu WIG20. Mniej oczywistym może być fakt, że podobna relacja zachodzi również w drugą stronę - replikując indeks WIG20 (tj. jego sklad, bo samym indeksem handlować nie można) handluje się w efekcie akcjami KGHM, co wpływa na ich cenę.
+
+Podstawową miarą powiązania dwóch aktywów jest współczynnik korelacji Pearsona, szeroko stosowany nie tylko w analizie rynków finansowych; obliczamy go biorąc jako zmienne dzienne zwroty obu aktywów, czyli korzystamy z następującego wzoru:
+$$
+\hat{\rho} = \dfrac{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(2)})(R_i^{(2)} - \overline{R}_i^{(1)})}{\sqrt{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(1)})^2 \sum_{i = 1}^n (R_i^{(2)} - \overline{R}_i^{(2)})^2}} = \dfrac{\hat{\text{Cov}}(R^{(1)}, R^{(2)})}{\sqrt{\hat{\sigma}^{(1)}}\sqrt{\hat{\sigma}^{(2)}}}
+$$
+Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z roku 2021 otrzymujemy wartość $\hat{\rho} \approx 0.601$. Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
+
+Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
+
+```{r, echo=FALSE}
+# Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
+# realizacje skorelowanych geometrycznych ruchów Browna
+# W pojedynczej kolumnie pojedyncza realizacji pełnej ścieżki; pojedynczy wiersz
+# zawiera wartość ścieżki w danej chwili okresu
+
+# S01 - wartość początkowa, mu1 - dryf (roczny), sigma1 - zmienność (roczna)
+# dla jednego z symulowanych geometrycznych ruchów Browna
+# S02 - wartość początkowa, mu2 - dryf (roczny), sigma2 - zmienność (roczna),
+# dla drugiego z symulowanych geometrycznych ruchów Browna
+# p - wspolczynnik korelacji symulowanych geometrycznych ruchow Browna
+# t - okres, długość ścieżki (w latach), n - liczba 'kroków', tj. podział okresu na części,
+# M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
+correlated_gbm_simulation <- function(S01, mu1, sigma1, S02, mu2, sigma2, p, t, n, M) {
+  
+  dt <- t / n
+  
+  brownian_increments_for_first_asset <- matrix(rnorm(M * n, mean = 0, sd = sqrt(dt)), nrow = M, ncol = n)
+  Z <- matrix(rnorm(M * n, mean = 0, sd <- sqrt(dt)), nrow = M, ncol = n)
+  brownian_increments_for_second_asset <- p * brownian_increments_for_first_asset + (1 - p^2)^(1/2) * Z
+  
+  brownian_increments_for_first_asset_transformed <- cbind(rep(1, M), 1 + mu1 * dt + sigma1 * brownian_increments_for_first_asset)
+  brownian_increments_for_second_asset_transformed <- cbind(rep(1, M), 1 + mu2 * dt + sigma2 * brownian_increments_for_second_asset)
+  
+  simulated_price_paths_for_first_asset <- S01 * t(apply(brownian_increments_for_first_asset_transformed, 1, cumprod))
+  simulated_price_paths_for_second_asset <- S02 * t(apply(brownian_increments_for_second_asset_transformed, 1, cumprod))
+  
+  return(list(t(simulated_price_paths_for_first_asset), t(simulated_price_paths_for_second_asset)))
+}
+```
+
+```{r, echo=FALSE, cache = TRUE,}
+# Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
+# ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
+# mozemy pozniej usunac)
+kghm_data <- read_csv('kgh_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+kghm_data <- kghm_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+kghm_data$Zwrot[1] <- 0
+
+wig_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+
+wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
+kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
+```
+
+
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+# Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
+# nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
+# to wypadałoby zamienić je na ggplota
+x1 = correlated_gbm_simulation(wigS0, drift_vol_estimates[1, 1], drift_vol_estimates[2, 1],
+                              kghmS0, mean(kghm_2021_zwroty)*length(kghm_2021_zwroty), sd(kghm_2021_zwroty)*sqrt(length(kghm_2021_zwroty)),
+                              cor(wig_2021_zwroty, kghm_2021_zwroty), 1, 250, 1)
+
+x = seq(0, 1, length = 251)
+y1 = x1[[1]]
+y2 = x1[[2]]
+
+scale_factor <- diff(range(y1)) / diff(range(y2))
+shift <- min(y1) - min(y2) * scale_factor
+
+cor_plot_1 = ggplot() +
+  geom_line(
+    aes(x, y1, color = "y1"),
+    linewidth = 0.5
+  ) +
+  geom_line(
+    aes(x, y2 * scale_factor + shift, color = "y2"),
+    linewidth = 0.5
+  ) +
+  scale_y_continuous(
+    name = "Wartość indeksu",
+    sec.axis = sec_axis(
+      ~ (. - shift) / scale_factor,
+      name = "Cena akcji"
+    ) 
+  ) + xlab('Czas (lata)') +
+  scale_color_manual(
+    name = "",
+    values = c("y1" = "blue", "y2" = "red"),
+    labels = c("y1" = "Indeks WIG20", "y2" = "Akcje KGHM")
+  ) + labs(title = 'Symulacje notowań indeksu WIG20 \n i notowań akcji KGHM metodą bootstrapową') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 10),
+        legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+cor_plot_1
+```
+
+Na podstawie wykresu możemy zaobserwować, że większość picków pojawia się w podobnych miejscach czasu dla obu aktywów, natomiast widać różnicę pomiędzy wartościami. Może to sugerować, że nie jest to korelacja równa 1 z różnicą co do znaku, ale prawie na pewno możemy wywnioskować, że występuje jakaś korelacja między trajektoriami.
+
+```{r, echo=FALSE}
+correlated_bootstrap_simulation <- function(S01, S02, returns_set1, returns_set2, n, M) {
+  if (length(returns_set1) != length(returns_set2)) {stop("Returns sets must be of equal size")}
+  N = length(returns_set1)
+  
+  simulated_price_paths_for_first_asset  = matrix(nrow = M, ncol = n + 1)
+  simulated_price_paths_for_second_asset = matrix(nrow = M, ncol = n + 1)
+  
+  for (i in 1:M) {
+    
+    random_indexes = sample(1:N, size = n, replace = TRUE)
+    sampled_increments_for_first_asset  = returns_set1[random_indexes]
+    sampled_increments_for_second_asset = returns_set2[random_indexes]
+    
+    simulated_price_paths_for_first_asset[i, ]  = S01 * cumprod(c(1, sampled_increments_for_first_asset + 1))
+    simulated_price_paths_for_second_asset[i, ] = S02 * cumprod(c(1, sampled_increments_for_second_asset + 1))
+    
+  }
+  
+  return(list(simulated_price_paths_for_first_asset, simulated_price_paths_for_second_asset))
+}
+```
+
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+# Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
+# nawet jeśli byśmy zdecydowali się na zostawienie przykładowych wykresów tego typu,
+# to wypadałoby zamienić je na ggplota
+x2 = correlated_bootstrap_simulation(wigS0, kghmS0, wig_2021_zwroty, kghm_2021_zwroty, 250, 1)
+
+x = seq(0, 1, length = 251)
+y3 = as.vector(x2[[1]])
+y4 = as.vector(x2[[2]])
+
+scale_factor <- diff(range(y3)) / diff(range(y4))
+shift <- min(y3) - min(y4) * scale_factor
+
+cor_plot_2 = ggplot() +
+  geom_line(
+    aes(x, y3, color = "y1"),
+    linewidth = 0.5
+  ) +
+  geom_line(
+    aes(x, y4 * scale_factor + shift, color = "y2"),
+    linewidth = 0.5
+  ) +
+  scale_y_continuous(
+    name = "Wartość indeksu",
+    sec.axis = sec_axis(
+      ~ (. - shift) / scale_factor,
+      name = "Cena akcji"
+    ) 
+  ) + xlab('Czas (lata)') +
+  scale_color_manual(
+    name = "",
+    values = c("y1" = "blue", "y2" = "red"),
+    labels = c("y1" = "Indeks WIG20", "y2" = "Akcje KGHM")
+  ) + labs(title = 'Symulacje notowań indeksu WIG20 \n i notowań akcji KGHM metodą standardową') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 10),
+        legend.position = "bottom",
+        legend.text = element_text(size = 11)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+cor_plot_2
+```
+
+Z wykresu trajektorii możemy wyciągnąć wnioski, iż jest to do pewnego stopnia skorelowane, gdyż możemy zauważyć, że picki są w bardzo podobnych momentach czasu. Oczywistym jest, że będą pojawiać się różnice pomiędzy wartościami, o jakie wzrastają/spadają trajektorie, natomiast może to wynikać z tego, że WIG20 jest indeksem opierającym się nie tylko na wartości KGHM, ale też na 19 innych akcjach.
+
+## Opcje na WIG20
+
+Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrumentami pochodnymi, w tym europejskimi, waniliowymi opcjami CALL i PUT na indeks WIG20. Inastrumenty te charakteryzują się następującymi własnościami:
+
+* 6 możliwości wyboru miesiąca wygaśnięcia: 3 najbliższe miesiące kalendarzowe + 3 kolejne miesiące
+z marcowego cyklu kwartalnego (marzec, czerwiec,
+wrzesień, grudzień)
+
+* dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii. 
+
+GPW określa ryzyko handlu opcjami na najwyższym możliwym poziomie, głównie ze względu na potencjalną niską płynność instrumentu i brak możliwości zamknięcia pozycji przed terminem wygaśnięcia. 
+
+### Strategia LONG CALL
+
+(tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
+
+```{r, echo=FALSE}
+# Parametry
+K <- 100      # strike
+premia <- 10  # koszt zakupu opcji
+S_range <- seq(50, 150, by = 1)
+
+# Zysk/strata z long call
+df <- data.frame(S = S_range) %>%
+  mutate(
+    Zysk = pmax(S - K, 0) - premia
+  )
+
+# Punkt break-even
+break_even <- K + premia
+
+ggplot(df, aes(x = S, y = Zysk)) +
+  # Obszar zysku (zielony) i straty (czerwony)
+  geom_area(data = df %>% filter(Zysk >= 0), 
+            fill = "#2ECC71", alpha = 0.3) +
+  geom_area(data = df %>% filter(Zysk <= 0), 
+            fill = "#E74C3C", alpha = 0.3) +
+  # Linia payoff
+  geom_line(color = "#2980B9", linewidth = 1.5) +
+  # Linie pomocnicze
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
+  # Punkty kluczowe
+  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
+  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
+  # Etykiety punktów
+  annotate("text", x = K, y = -premia - 3, 
+           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
+  annotate("text", x = break_even + 8, y = 2, 
+           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
+  annotate("text", x = K - 5, y = 15, 
+           label = paste0("K = ", K), color = "gray40", size = 4) +
+  # Tytuł i etykiety
+  labs(
+    title = "Strategia Long Call",
+    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
+    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
+    y = "Zysk / Strata"
+  ) +
+  # Styl
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  # Skala Y
+  scale_y_continuous(breaks = seq(-20, 50, by = 10))
+```
+
+### Strategia LONG PUT
+
+(tutaj bym narysował wykresiki z możliwą stratą i zyskiem)
+
+```{r, echo=FALSE}
+# Parametry
+K <- 100      # strike
+premia <- 10  # koszt zakupu opcji
+S_range <- seq(50, 150, by = 1)
+
+# Zysk/strata z long put
+df <- data.frame(S = S_range) %>%
+  mutate(
+    Zysk = pmax(K - S, 0) - premia
+  )
+
+# Punkt break-even
+break_even <- K - premia
+
+ggplot(df, aes(x = S, y = Zysk)) +
+  # Obszar zysku (zielony) i straty (czerwony)
+  geom_area(data = df %>% filter(Zysk >= 0), 
+            fill = "#2ECC71", alpha = 0.3) +
+  geom_area(data = df %>% filter(Zysk <= 0), 
+            fill = "#E74C3C", alpha = 0.3) +
+  # Linia payoff
+  geom_line(color = "#9B59B6", linewidth = 1.5) +
+  # Linie pomocnicze
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = break_even, linetype = "dotted", color = "#27AE60", linewidth = 1) +
+  # Punkty kluczowe
+  geom_point(aes(x = K, y = -premia), color = "#E74C3C", size = 3) +
+  geom_point(aes(x = break_even, y = 0), color = "#27AE60", size = 3) +
+  # Etykiety punktów
+  annotate("text", x = K, y = -premia - 3, 
+           label = paste0("Max strata = -", premia), color = "#E74C3C", size = 4) +
+  annotate("text", x = break_even - 8, y = 2, 
+           label = paste0("Break-even = ", break_even), color = "#27AE60", size = 4) +
+  annotate("text", x = K + 5, y = 15, 
+           label = paste0("K = ", K), color = "gray40", size = 4) +
+  # Maksymalny zysk
+  annotate("text", x = 55, y = K - premia - 50 - 5, 
+           label = paste0("Max zysk = ", K - premia, "\n(gdy S = 0)"), 
+           color = "#27AE60", size = 4, hjust = 0) +
+  # Tytuł i etykiety
+  labs(
+    title = "Strategia Long Put",
+    subtitle = paste0("Strike (K) = ", K, ", Premia = ", premia),
+    x = expression(paste("Cena aktywa w dniu wygaśnięcia (", S[T], ")")),
+    y = "Zysk / Strata"
+  ) +
+  # Styl
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "gray50", hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  # Skala Y
+  scale_y_continuous(breaks = seq(-20, 100, by = 10))
+```
+
+### Payoff
+
+Payoff to wartość opcji w momencie jej wygaśnięcia w chwili T na podstawie relacji wartości instrumentu bazowego S(T) i ceny wykonania opcji K, czyli przy pominięciu ceny zakupu samej opcji. 
+
+Dla opcji CALL:
+
+$$\text{Payoff} = \max{(S(T) - K, 0)}$$
+
+Dla opcji PUT:
+
+$$\text{Payoff} = \max{(K - S(T), 0)}$$
+
+(KID, standard - STRONA GPW https://www.gpw.pl/standardy-warunki-obrotu)
+
+```{r, echo=FALSE}
+
+# Parametry
+K <- 100  # strike
+S_range <- seq(50, 150, by = 1)  # zakres cen aktywa
+
+# Payoffy
+df <- data.frame(S = S_range) %>%
+  mutate(
+    CALL = pmax(S - K, 0),
+    PUT = pmax(K - S, 0)
+  )
+
+# Wykres CALL
+plot_call <- ggplot(df, aes(x = S, y = CALL)) +
+  geom_line(color = "#3498DB", linewidth = 1.5) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  labs(title = "CALL", x = expression(S[T]), y = "Payoff") +
+  theme_minimal(base_size = 14)
+
+# Wykres PUT
+plot_put <- ggplot(df, aes(x = S, y = PUT)) +
+  geom_line(color = "#E74C3C", linewidth = 1.5) +
+  geom_vline(xintercept = K, linetype = "dashed", color = "gray50") +
+  labs(title = "PUT", x = expression(S[T]), y = "") +
+  theme_minimal(base_size = 14)
+
+# Obok siebie
+plot_call | plot_put
+```
+
+### Histogram payoffów opcji zapadających w grudniu 2022
+
+```{r, echo=FALSE}
+strikes <- c(1800, 1900, 2000, 2100, 2200, 2300)
+mnoznik <- 1
+
+# Wartości końcowe z symulacji
+ST_values <- simulations[[1]][nrow(simulations[[1]]), ]
+
+# Obliczamy wszystkie payoffy, żeby ustalić wspólne zakresy osi
+all_payoffs_call <- lapply(strikes, function(K) pmax(ST_values - K, 0) * mnoznik)
+
+# Wspólne zakresy osi
+x_max <- max(unlist(all_payoffs_call))
+x_min <- 0
+y_max <- max(sapply(all_payoffs_call, function(p) {
+  h <- hist(p, breaks = 25, plot = FALSE)
+  max(h$counts)
+})) * 1.1
+
+plot_payoff_hist <- function(ST_values, K, type = "CALL", x_limits, y_limits) {
+  if (type == "CALL") {
+    payoffs <- pmax(ST_values - K, 0) * mnoznik
+    fill_col <- "#3498DB"
+    title_col <- "#2980B9"
+  } else {
+    payoffs <- pmax(K - ST_values, 0) * mnoznik
+    fill_col <- "#E74C3C"
+    title_col <- "#C0392B"
+  }
+  
+  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
+    geom_histogram(bins = 25, fill = fill_col, color = "white", alpha = 0.8) +
+    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
+    coord_cartesian(xlim = x_limits, ylim = y_limits) +
+    labs(
+      title = paste0(type, " (K=", K, ")"),
+      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
+                       round(mean(payoffs > 0) * 100, 0), "%"),
+      x = "Payoff (PLN)", y = ""
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, color = title_col),
+      plot.subtitle = element_text(hjust = 0.5, size = 8)
+    )
+}
+
+# Wspólne limity
+x_limits <- c(x_min, x_max)
+y_limits <- c(0, y_max)
+
+# Siatka CALL 2x3 ze wspólnymi osiami
+c1 <- plot_payoff_hist(ST_values, strikes[1], "CALL", x_limits, y_limits)
+c2 <- plot_payoff_hist(ST_values, strikes[2], "CALL", x_limits, y_limits)
+c3 <- plot_payoff_hist(ST_values, strikes[3], "CALL", x_limits, y_limits)
+c4 <- plot_payoff_hist(ST_values, strikes[4], "CALL", x_limits, y_limits)
+c5 <- plot_payoff_hist(ST_values, strikes[5], "CALL", x_limits, y_limits)
+c6 <- plot_payoff_hist(ST_values, strikes[6], "CALL", x_limits, y_limits)
+
+(c1 | c2 | c3) / (c4 | c5 | c6) +
+  plot_annotation(
+    title = "Rozkład payoffów opcji CALL - grudzień 2022",
+    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
+    )
+  )
+```
+
+```{r, echo=FALSE}
+strikes <- c(3000, 3100, 3200, 3300, 3400, 3500)
+mnoznik <- 1
+
+# Wartości końcowe z symulacji
+ST_values <- simulations[[1]][nrow(simulations[[1]]), ]
+
+# Obliczamy wszystkie payoffy PUT, żeby ustalić wspólne zakresy osi
+all_payoffs_put <- lapply(strikes, function(K) pmax(K - ST_values, 0) * mnoznik)
+
+# Wspólne zakresy osi
+x_max <- max(unlist(all_payoffs_put))
+x_min <- 0
+y_max <- max(sapply(all_payoffs_put, function(p) {
+  h <- hist(p, breaks = 25, plot = FALSE)
+  max(h$counts)
+})) * 1.1
+
+x_limits <- c(x_min, x_max)
+y_limits <- c(0, y_max)
+
+# Funkcja do histogramu PUT ze wspólnymi osiami
+plot_put_hist <- function(ST_values, K, x_limits, y_limits) {
+  payoffs <- pmax(K - ST_values, 0) * mnoznik
+  
+  ggplot(data.frame(payoff = payoffs), aes(x = payoff)) +
+    geom_histogram(bins = 25, fill = "#E74C3C", color = "white", alpha = 0.8) +
+    geom_vline(xintercept = mean(payoffs), color = "black", linetype = "dashed") +
+    coord_cartesian(xlim = x_limits, ylim = y_limits) +
+    labs(
+      title = paste0("PUT (K=", K, ")"),
+      subtitle = paste0("Śr: ", round(mean(payoffs), 0), " PLN | ITM: ", 
+                       round(mean(payoffs > 0) * 100, 0), "%"),
+      x = "Payoff (PLN)", y = ""
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, color = "#C0392B"),
+      plot.subtitle = element_text(hjust = 0.5, size = 8)
+    )
+}
+
+# Siatka PUT ze wspólnymi osiami
+p1 <- plot_put_hist(ST_values, strikes[1], x_limits, y_limits)
+p2 <- plot_put_hist(ST_values, strikes[2], x_limits, y_limits)
+p3 <- plot_put_hist(ST_values, strikes[3], x_limits, y_limits)
+p4 <- plot_put_hist(ST_values, strikes[4], x_limits, y_limits)
+p5 <- plot_put_hist(ST_values, strikes[5], x_limits, y_limits)
+p6 <- plot_put_hist(ST_values, strikes[6], x_limits, y_limits)
+
+(p1 | p2 | p3) / (p4 | p5 | p6) +
+  plot_annotation(
+    title = "Rozkład payoffów opcji PUT - grudzień 2022",
+    subtitle = paste0("Symulacja GBM, S0 = ", round(S0, 0)),
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray50")
+    )
+  )
+```
+
+ 
+
+\newpage
+
+# Część A - Delta-Hedging opcji call na WIG20
+
+W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytuacji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy przyjęty model cen opcji oraz strategie zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022.
+
+## Model i strategia zabezpieczająca
+
+Rozpoczniemy od przedstawienia modelu Blacka-Scholesa, w oparciu o który będziemy w stanie skonstruować portfel zabezpieczający^[część rozdziału dotycząca wyprowadzenia modelu oraz konstrukcji portfela zabezpieczającego jest analogiczna do tej z książki Paula Wilmotta *On Quantitative Finance*, rozdział 5]. Oznaczmy przez $V$ wartość opcji (na razie nie doprecyzowujemy czy jest to opcja call, czy put) na indeks WIG20, a przez $S_t$ wartość indeksu w chwili $t$, czyli matematycznie proces stochastyczny opisujący jego notowania - zakładamy, że notowania te są pewną realizacją Geometrycznego Ruchu Browna:
+$$
+dS_t = \mu S_t dt + \sigma S_t dX_t
+$$
+gdzie $\mu$ i $\sigma$ są pewnymi stałymi, a $X_t$ ruchem Browna. Rozważmy portfel $\Pi$ składający się z pojedynczej krótkiej pozycji na opcji $V$ oraz długiej pozycji w ilości $\Delta$ indeksu WIG20:
+$$
+\Pi = V - \Delta S.
+$$
+Korzystając z formuły Ito jesteśmy w stanie pokazać, że zmiana wartości tego portfela wynosi:
+$$
+d\Pi = \frac{\partial V}{\partial t}dt + \frac{\partial V}{\partial S}dS + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2}dt - \Delta dS
+$$
+wówczas, przyjmując $\Delta = \frac{\partial V}{\partial S}$ eliminujemy ze zmiany w portfelu element losowy $dS$, co sprawia, że zmiany w portfelu są całkowicie deterministyczne, więc muszą rosnąć zgodnie ze stopą procentową bez ryzyka, tj.:
+$$
+d\Pi = r \Pi dt
+$$
+łącząc powyższe równania w całość, otrzymujemy:
+$$
+\frac{\partial V}{\partial t}  + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2} + rS\frac{\partial V}{\partial S} - rV = 0
+$$
+czyli równanie Blacka-Scholesa. Doprecyzowując odpowiednie warunki brzegowe (czyli m.in. payoff danej opcji, wskazujący na to czy jest to opcja call czy put) jestesmy w stanie wyznaczyć analityczne rozwiązanie, które umożliwia wyznaczenie wartości $V$ oraz  wartości pochodnej cząstkowej $\frac{\partial V}{\partial S}$ w dowolnej chwili $t$. Dzięki wyznaczeniu wartości opcji w ten sposób uzyskaliśmy również postać samofinansującego portfela, który replikuje jej payoff:
+$$
+\Pi = \Delta S + B = \frac{\partial V}{\partial S} S + B
+$$
+gdzie $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$. Aktualizując ten portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
+
+Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, ...,t_n$, $t_0 = 0$ oraz, że w każdej z tych chwil znamy wartość (oznaczaną przez $S_{t_i}$) indeksu WIG20. W chwili $t_0 = 0$ sprzedajemy jedną opcję o wartości $V_0$ (krótka pozycja) oraz kupujemy indeks WIG20 (długa pozycja) w ilości $\Delta_0 = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_0}$. Pozostałe środki finansowe, czyli $C_0 = V_0 - \Delta_0$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$ (w następnej chwili ich wartość wynosi więc $C_{t_1} = C_0e^{r(t_1 - t_0)}$). 
+
+Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, czyli (zakładając, że obecna chwila to $t_i$): sprzedajemy posiadaną ilość (czyli $\Delta_{t_{i - 1}}$) indeksu WIG20, po czym kupujemy $\Delta_{t_{i}} = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_{t_i}}$ indeksu WIG20. Pozostałe środki finansowe, czyli $C_{t_i} = C_{t_{i - 1}}e^{r(t_{i} - t_{i - 1})} - (\Delta_{t_{i}} - \Delta_{t_{i - 1}})S_{t_i}$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$. 
+
+Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
+
+## Analiza wpływu częstotliwości re-hedgingu
+
+```{r, include = FALSE}
+#   Funkcja przeprowadzająca algorytm delta-hedgingowy
+#
+#   S0 - wartość aktywa w chwili 0, mu - dryf, sigma - zmienność, r - stopa wolna od ryzyka,
+#   n - liczba kroków (rehedginow), m - liczba powtórzeń algorytmu,
+#   K - cena wykonania opcji, option_premium - cena opcji (jeśli nic nie podamy, to 
+#   wyznaczamy ją ze wzoru Blacka-Scholesa), real_prices - wartości kolejnych notowań
+#   WIG20 (jeśli nic nie podamy, to symulujemy ją funkcją gbm_simulation, tak jak w poprzednich rozdziałach)
+#   option_type - typ opcji, 'C' (call, czyli domyślnie), w przeciwnym wypadku put
+BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
+  
+  #   Funkcja, która wyznacza wartość opcji według wzoru Blacka-Scholesa
+  BS_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(S*pnorm(d1) - K*exp(-r*(t_total - t))*pnorm(d2))}
+    else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
+  }
+  
+  #   Funkcja, która wyznacza wartość delty opcji według wzoru Blacka-Scholesa 
+  BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
+    if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
+    else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
+  }
+  
+  if ((n < 2) | (n > t*250) | ((!is.na(real_prices)) & (n > t*length(real_prices)))) {
+    message('n (częstość aktualizowania portfela) za niska lub za wysoka')
+    stop()
+  }
+  
+  
+  #   Macierze, które przechowują informacje o portfelu w kazdej chwili.
+  #   Potencjalnie przydatne w przyszłości do analizy wyników
+  #
+  #   deltas_matrix - macierz z wartością delty (ilości indeksu) w portfelu
+  #   deltas_matrix - macierz z wartością środków finansowych (pozyczonych/zainwestowanych) w portfelu
+  #   final_price_diffs - wektor zawierający roznice między payoffem replikowanej opcji,
+  #   a wartością naszego portfela replikującego
+  deltas_matrix = matrix(nrow = n, ncol = m)
+  cashs_matrix = matrix(nrow = n, ncol = m)
+  final_price_diffs = numeric(m)
+  
+  #   Pętla wykonująca algorytm m razy
+  for (j in 1:m) {
+    
+    #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
+    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, 250, 1))}
+    else {price_path = real_prices}
+    
+    tstep = 0
+    dt = t/n
+    
+    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
+    if (is.na(option_premium)) {cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)}
+    else {cashs_matrix[1, j] = option_premium}
+    
+    #   Ustalenie wartości początkowych portfela
+    cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)
+    deltas_matrix[1, j] = BS_delta(S0, K, r, sigma, t, tstep, option_type)
+    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*S0
+    
+    #   Pętla wykonująca aktualizację stanu portfela (re-hedging)
+    for (i in 1:(n - 1)) {
+      
+      #   Zwiększenie momentu czasowego
+      tstep = tstep + dt
+      #   Wyznaczamy nową deltę
+      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, sigma, t, tstep, option_type)
+      #   Aktualizujemy stan środków finansowych: wcześniej posiadane środki zwiększamy o odsetki i odejmujemy
+      #   różnicę między pieniędzmi wydanymi na nową deltę a tymi uzyskanymi ze sprzedaży starej
+      cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1]
+      
+    }
+    
+    #   Wyznaczenie payoffu w zależności od typu opcji
+    if (option_type == 'C') {payoff = max(price_path[length(price_path)] - K, 0)}
+    else {payoff = max(K - price_path[length(price_path)], 0)}
+    
+    #   Stan (wartość) portfela w finalnej chwili
+    portfolio = cashs_matrix[n, j] * exp(r*(t - tstep)) + deltas_matrix[n, j] * price_path[length(price_path)]
+    
+    #   Wyznaczenie różnicy między wartością portfela a payoffem replikowanej opcji
+    final_price_diffs[j] = portfolio - payoff
+  }
+  
+  #   Zwracamy wektor różnic między wartością portfela a payoffem i macierze zawierające
+  #   dane o składnie portfela w każdej chwili
+  return(list(final_price_diffs, deltas_matrix, cashs_matrix)) 
+}
+```
+
+```{r, echo = FALSE, cache=TRUE}
+mu = 0
+sigma = 0.2
+r = 0.05
+t = 1
+#M = 10000
+K = 1800
+
+call_rehedging_data = list(
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]])
+)
+
+put_rehedging_data = list(
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
+  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]])
+)
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+call_plot1 = ggplot(call_rehedging_data[[1]], aes(x = c(call_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot2 = ggplot(call_rehedging_data[[2]], aes(x = c(call_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot3 = ggplot(call_rehedging_data[[3]], aes(x = c(call_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot4 = ggplot(call_rehedging_data[[4]], aes(x = c(call_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot5 = ggplot(call_rehedging_data[[5]], aes(x = c(call_rehedging_data[[5]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+call_plot6 = ggplot(call_rehedging_data[[6]], aes(x = c(call_rehedging_data[[6]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
+  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja CALL, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
+put_plot1 = ggplot(put_rehedging_data[[1]], aes(x = c(put_rehedging_data[[1]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot2 = ggplot(put_rehedging_data[[2]], aes(x = c(put_rehedging_data[[2]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot3 = ggplot(put_rehedging_data[[3]], aes(x = c(put_rehedging_data[[3]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot5 = ggplot(put_rehedging_data[[5]], aes(x = c(put_rehedging_data[[5]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+put_plot6 = ggplot(put_rehedging_data[[6]], aes(x = c(put_rehedging_data[[6]][[1]]))) +  
+  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
+  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
+  scale_x_continuous(limits = c(min = -50, max = 50)) +
+  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+
+
+(put_plot1 | put_plot2) / (put_plot3 | put_plot4) / (put_plot5 | put_plot6) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja PUT, cena wykonania 1800, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+
+
+
+
+```
+
+Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze (RACHUNEK?). Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).  
+
+### Rehedging a strike 
+
+#### Opcja CALL
+
+```{r sensitivity_table_strike_sigma_call, echo=FALSE, cache=TRUE, results='asis'}
+
+option_type_analysis <- "C"   
+M_table <- 2000
+
+rehedge_counts <- c(250, 125, 63, 35, 12)
+
+fixed_sigma <- 0.20
+strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
+
+strike_grid <- expand.grid(
+  strike = strike_values,
+  rehedges = rehedge_counts
+) %>%
+  as_tibble()
+
+strike_table <- strike_grid %>%
+  mutate(
+    errors = pmap(
+      list(strike, rehedges),
+      function(strike, rehedges) {
+        BS_delta_hedging_algorithm(
+          S0 = S0,
+          mu = mu,
+          sigma = fixed_sigma,
+          r = r,
+          t = t,
+          n = rehedges,
+          m = M_table,
+          K = strike,
+          option_premium = NA,
+          real_prices = NA,
+          option_type = option_type_analysis
+        )[[1]]
+      }
+    ),
+    sd_error = map_dbl(errors, sd)
+  ) %>%
+  select(strike, rehedges, sd_error) %>%
+  mutate(sd_error = round(sd_error, 2)) %>%
+  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+  arrange(strike)
+
+cat("#### Wpływ ceny wykonania przy ustalonej zmienności\n\n")
+cat(paste0("Przyjęto zmienność $\\sigma = ", fixed_sigma, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+
+kable(
+  strike_table,
+  col.names = c("Strike", "250", "125", "63", "35", "12"),
+  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych wartości strike (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+)
+
+cat("\n\n")
+
+fixed_strike <- 1800
+sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.70)
+
+sigma_grid <- expand.grid(
+  sigma = sigma_values,
+  rehedges = rehedge_counts
+) %>%
+  as_tibble()
+
+sigma_table <- sigma_grid %>%
+  mutate(
+    errors = pmap(
+      list(sigma, rehedges),
+      function(sigma, rehedges) {
+        BS_delta_hedging_algorithm(
+          S0 = S0,
+          mu = mu,
+          sigma = sigma,
+          r = r,
+          t = t,
+          n = rehedges,
+          m = M_table,
+          K = fixed_strike,
+          option_premium = NA,
+          real_prices = NA,
+          option_type = option_type_analysis
+        )[[1]]
+      }
+    ),
+    sd_error = map_dbl(errors, sd)
+  ) %>%
+  select(sigma, rehedges, sd_error) %>%
+  mutate(sd_error = round(sd_error, 2)) %>%
+  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+  arrange(sigma)
+
+cat("#### Wpływ zmienności przy ustalonej cenie wykonania\n\n")
+cat(paste0("Przyjęto cenę wykonania $K = ", fixed_strike, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+
+kable(
+  sigma_table,
+  col.names = c("Zmienność", "250", "125", "63", "35", "12"),
+  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych poziomów zmienności (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+)
+```
+
+#### Opcja PUT
+
+```{r sensitivity_table_strike_sigma_put, echo=FALSE, cache=TRUE, results='asis'}
+
+option_type_analysis <- "P"   
+M_table <- 2000
+
+rehedge_counts <- c(250, 125, 63, 35, 12)
+
+
+fixed_sigma <- 0.20
+strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
+#c(1500, 1600, 1700, 1800, 1900, 2000)
+strike_grid <- expand.grid(
+  strike = strike_values,
+  rehedges = rehedge_counts
+) %>%
+  as_tibble()
+
+strike_table <- strike_grid %>%
+  mutate(
+    errors = pmap(
+      list(strike, rehedges),
+      function(strike, rehedges) {
+        BS_delta_hedging_algorithm(
+          S0 = S0,
+          mu = mu,
+          sigma = fixed_sigma,
+          r = r,
+          t = t,
+          n = rehedges,
+          m = M_table,
+          K = strike,
+          option_premium = NA,
+          real_prices = NA,
+          option_type = option_type_analysis
+        )[[1]]
+      }
+    ),
+    sd_error = map_dbl(errors, sd)
+  ) %>%
+  select(strike, rehedges, sd_error) %>%
+  mutate(sd_error = round(sd_error, 2)) %>%
+  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+  arrange(strike)
+
+cat("#### Wpływ ceny wykonania przy ustalonej zmienności\n\n")
+cat(paste0("Przyjęto zmienność $\\sigma = ", fixed_sigma, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+
+kable(
+  strike_table,
+  col.names = c("Strike", "250", "125", "63", "35", "12"),
+  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych wartości strike (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+)
+
+cat("\n\n")
+
+
+fixed_strike <- 1800
+sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.30)
+
+sigma_grid <- expand.grid(
+  sigma = sigma_values,
+  rehedges = rehedge_counts
+) %>%
+  as_tibble()
+
+sigma_table <- sigma_grid %>%
+  mutate(
+    errors = pmap(
+      list(sigma, rehedges),
+      function(sigma, rehedges) {
+        BS_delta_hedging_algorithm(
+          S0 = S0,
+          mu = mu,
+          sigma = sigma,
+          r = r,
+          t = t,
+          n = rehedges,
+          m = M_table,
+          K = fixed_strike,
+          option_premium = NA,
+          real_prices = NA,
+          option_type = option_type_analysis
+        )[[1]]
+      }
+    ),
+    sd_error = map_dbl(errors, sd)
+  ) %>%
+  select(sigma, rehedges, sd_error) %>%
+  mutate(sd_error = round(sd_error, 2)) %>%
+  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+  arrange(sigma)
+
+cat("#### Wpływ zmienności przy ustalonej cenie wykonania\n\n")
+cat(paste0("Przyjęto cenę wykonania $K = ", fixed_strike, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+
+kable(
+  sigma_table,
+  col.names = c("Zmienność", "250", "125", "63", "35", "12"),
+  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych poziomów zmienności (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+)
+```
+
+Jak widać z powyższych tabel, wzrost zmienności wpływa na rozkład wartości błędu hedgingowego podobnie jak wzrost ceny wykonania opcji. Tutaj także różnice między opcją CALL i PUT są marginalne. Z dosyć dobrą dokładnością rozkłady dla obydwu typów opcji są jednakowe.  
+
+### Podrozdział ...
+
+```{r quantiles_rehedging_delta, echo=FALSE, cache=TRUE}
+set.seed(123)
+
+N_steps <- 250
+dt_day <- t / N_steps
+
+# macierz ścieżek: wiersze = czas, kolumny = symulacje
+sim_paths <- matrix(NA, nrow = N_steps + 1, ncol = M)
+sim_paths[1, ] <- S0
+
+for (j in 1:M) {
+  Z <- rnorm(N_steps)
+  for (i in 1:N_steps) {
+    sim_paths[i + 1, j] <- sim_paths[i, j] * exp((mu - 0.5 * sigma^2) * dt_day + sigma * sqrt(dt_day) * Z[i])
+  }
+}
+
+```
+
+```{r new_hedging_functions, echo=FALSE, cache=TRUE}
+BS_price <- function(S, K, r, sigma, tau, option_type) {
+  if (tau <= 0) {
+    if (option_type == "C") return(pmax(S - K, 0))
+    else return(pmax(K - S, 0))
+  }
+  
+  d1 <- (log(S / K) + (r + 0.5 * sigma^2) * tau) / (sigma * sqrt(tau))
+  d2 <- d1 - sigma * sqrt(tau)
+  
+  if (option_type == "C") {
+    return(S * pnorm(d1) - K * exp(-r * tau) * pnorm(d2))
+  } else {
+    return(K * exp(-r * tau) * pnorm(-d2) - S * pnorm(-d1))
+  }
+}
+
+BS_delta <- function(S, K, r, sigma, tau, option_type) {
+  if (tau <= 0) {
+    if (option_type == "C") return(as.numeric(S > K))
+    else return(-as.numeric(S < K))
+  }
+  
+  d1 <- (log(S / K) + (r + 0.5 * sigma^2) * tau) / (sigma * sqrt(tau))
+  
+  if (option_type == "C") {
+    return(pnorm(d1))
+  } else {
+    return(pnorm(d1) - 1)
+  }
+}
+
+hedging_errors_from_paths <- function(sim_paths, n, K, r, sigma, t, option_type) {
+  N_steps <- nrow(sim_paths) - 1
+  M <- ncol(sim_paths)
+  
+  dt <- t / n
+  hedge_times <- seq(0, t, length.out = n)
+  hedge_idx <- floor(hedge_times * N_steps / t) + 1
+  hedge_idx[hedge_idx > (N_steps + 1)] <- N_steps + 1
+  
+  errors <- numeric(M)
+  
+  for (j in 1:M) {
+    path <- sim_paths[, j]
+    
+    S_init <- path[1]
+    tau <- t
+    delta_old <- BS_delta(S_init, K, r, sigma, tau, option_type)
+    cash <- BS_price(S_init, K, r, sigma, tau, option_type) - delta_old * S_init
+    
+    if (n > 1) {
+      for (i in 2:n) {
+        S_now <- path[hedge_idx[i]]
+        tau <- t - hedge_times[i]
+        
+        delta_new <- BS_delta(S_now, K, r, sigma, tau, option_type)
+        cash <- cash * exp(r * dt) - (delta_new - delta_old) * S_now
+        delta_old <- delta_new
+      }
+    }
+    
+    S_T <- path[N_steps + 1]
+    payoff <- if (option_type == "C") max(S_T - K, 0) else max(K - S_T, 0)
+    portfolio <- cash + delta_old * S_T
+    
+    errors[j] <- portfolio - payoff
+  }
+  
+  return(errors)
+}
+```
+
+```{r new_quantiles_rehedging, echo=FALSE, cache=TRUE}
+
+rehedge_counts <- seq(5, 250, by = 5)
+
+compute_quantiles <- function(option_type, option_name) {
+  map_dfr(rehedge_counts, function(n) {
+    x <- hedging_errors_from_paths(
+      sim_paths = sim_paths,
+      n = n,
+      K = K,
+      r = r,
+      sigma = sigma,
+      t = t,
+      option_type = option_type
+    )
+    
+    tibble(
+      option = option_name,
+      rehedges = n,
+      q05 = quantile(x, 0.05),
+      q10 = quantile(x, 0.10),
+      q25 = quantile(x, 0.25),
+      q50 = quantile(x, 0.50),
+      q75 = quantile(x, 0.75),
+      q90 = quantile(x, 0.90),
+      q95 = quantile(x, 0.95)
+    )
+  })
+}
+
+call_quantiles <- compute_quantiles("C", "CALL")
+put_quantiles  <- compute_quantiles("P", "PUT")
+```
+
+```{r plot_rehedging_quantiles_delta, echo=FALSE, cache=TRUE}
+quantiles_all <- bind_rows(call_quantiles, put_quantiles)
+
+quantiles_long <- quantiles_all %>%
+  pivot_longer(cols = starts_with("q"), names_to = "quantile", values_to = "value")
+
+quantile_levels <- c("q05", "q10", "q25", "q50", "q75", "q90", "q95")
+quantile_labels <- c(
+  q05 = "0.05",
+  q10 = "0.10",
+  q25 = "0.25",
+  q50 = "0.50",
+  q75 = "0.75",
+  q90 = "0.90",
+  q95 = "0.95"
+)
+
+quantile_colors <- c(
+  q05 = "red3",
+  q10 = "orange3",
+  q25 = "goldenrod2",
+  q50 = "deepskyblue3",
+  q75 = "goldenrod2",
+  q90 = "orange3",
+  q95 = "red3"
+)
+
+quantiles_long$quantile <- factor(quantiles_long$quantile, levels = quantile_levels)
+
+p_call <- ggplot(filter(quantiles_long, option == "CALL"),
+                 aes(x = rehedges, y = value, color = quantile, group = quantile)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_manual(values = quantile_colors, labels = quantile_labels) +
+  labs(
+    title = "Opcja CALL",
+    x = "Liczba rehedgingów",
+    y = "Wartość kwantyla",
+    color = "Kwantyl"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+p_put <- ggplot(filter(quantiles_long, option == "PUT"),
+                aes(x = rehedges, y = value, color = quantile, group = quantile)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_manual(values = quantile_colors, labels = quantile_labels) +
+  labs(
+    title = "Opcja PUT",
+    x = "Liczba rehedgingów",
+    y = "Wartość kwantyla",
+    color = "Kwantyl"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+
+(p_call | p_put) +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = "Kwantyle błędu hedgingowego w zależności od liczby rehedgingów",
+    subtitle = "Porównanie rozkładów dla opcji CALL i PUT",
+    theme = theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 10, color = "gray40", hjust = 0.5)
+    )
+  ) &
+  theme(legend.position = "bottom")
+```
+
+Zgodnie z przewidywaniami linie kwantylowe odległe od siebie dla rzadkiego rehedgingu, zbiegają do mediany dla hedgingu częstego. Ponownie gdybyśmy rozważyli granicę rehedgingu ciągłego, dostalibyśmy linie kwantylowe nakłądające się na siebie. Na powyższych wykresach, zwłaszcza dla opcji PUT, widać cięzkie ogony, które rozciągają skrajne krzywe kwantylowe mocno w kierunku wartości skrajnych. Mediana niezależnie od częstotliwości hedgowania jest bliska zeru i wraz ze zwiększaniem częstotliwości, zbiega bliżej zera. Ta obserwacja pokrywa się z wnioskiem o dążeniu histogramów do miary Diraca w zerze wraz ze zwiększaneim częstotliwości, więc jest to spójne z poprzednimi obserwacjami.
+
+### Kiedy wystarczająco dobrze? (moje nagłówki serio do zmiany...)
+
+Jak widać w powyższej analizie, chcielibyśmy rehedgować jak najczęściej, wtedy całkowicie uodparniamy się na losowość zmian aktywa. W rzeczywistości jednak, ciągły rehedging jest niemożliwy a sama operacja rehedgingu wiąże się z kosztami. Dobrym rozwiązaniem byłoby więc znalezienie takiej częstotliwości rehedgingu, która jest jak najrzadsza zapewniając przy tym wystarczająco dobre rezultaty (odpowiednio niskie odchylenia).
+
+Rozważymy kilka wartości tolerowanego błędu hedgingowego. Żądamy, żeby z $95\%$ (WPISANE Z PALCA, MOŻE NIEWŁAŚCIWA WARTOŚĆ?) prawdopodobieństwem nasza faktyczna różnica była co do modułu mniejsza niż ustalona granica tolerancji. Innymi słowy dla granicy tolerancji $\varepsilon$ i błędu hedgingowego $e$ żądamy:
+
+$$ \mathbb{P}[|e| \leq \varepsilon] \geq 0.95 $$
+
+```{r tolerance_rehedging_delta, echo=FALSE, cache=TRUE, fig.width=12, fig.height=8}
+
+# Liczby rehedgingów, które badamy
+rehedge_counts <- seq(5, 250, by = 5)
+
+# Poziomy tolerancji błędu
+epsilons <- c(10, 20, 30)
+
+# Funkcja licząca prawdopodobieństwo sukcesu:
+# sukces = |błąd hedgingowy| <= epsilon
+compute_success_probabilities <- function(option_type, option_name) {
+  map_dfr(epsilons, function(epsilon) {
+    map_dfr(rehedge_counts, function(n) {
+      errors <- hedging_errors_from_paths(
+        sim_paths = sim_paths,
+        n = n,
+        K = K,
+        r = r,
+        sigma = sigma,
+        t = t,
+        option_type = option_type
+      )
+      
+      tibble(
+        option = option_name,
+        epsilon = epsilon,
+        rehedges = n,
+        prob_success = mean(abs(errors) <= epsilon)
+      )
+    })
+  })
+}
+
+# Liczenie wyników
+success_call <- compute_success_probabilities("C", "CALL")
+success_put  <- compute_success_probabilities("P", "PUT")
+
+success_all <- bind_rows(success_call, success_put)
+
+# Tabela: minimalna liczba rehedgingów spełniająca kryterium 95%
+min_rehedges_table <- success_all %>%
+  filter(prob_success >= 0.95) %>%
+  group_by(option, epsilon) %>%
+  summarise(min_rehedges = min(rehedges), .groups = "drop")
+
+# Jeśli dla jakiegoś epsilon nie udało się osiągnąć 0.95, uzupełniamy brak
+min_rehedges_table_full <- expand.grid(
+  option = c("CALL", "PUT"),
+  epsilon = epsilons
+) %>%
+  as_tibble() %>%
+  left_join(min_rehedges_table, by = c("option", "epsilon")) %>%
+  mutate(min_rehedges = ifelse(is.na(min_rehedges), NA, min_rehedges))
+```
+
+```{r plot_tolerance_rehedging_delta, echo=FALSE, cache=TRUE, fig.width=12, fig.height=8}
+# Wykres
+ggplot(success_all, aes(x = rehedges, y = prob_success, color = option)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0.95, linetype = "dashed", color = "black") +
+  scale_y_continuous(limits = c(0, 1)) +
+  facet_wrap(~epsilon, labeller = labeller(epsilon = function(x) paste("Tolerancja =", x))) +
+  labs(
+    title = "Prawdopodobieństwo uzyskania błędu hedgingowego w granicach tolerancji",
+    subtitle = "Pozioma linia przerywana oznacza poziom 95%",
+    x = "Liczba rehedgingów",
+    y = "Prawdopodobieństwo spełnienia warunku |błąd| ≤ tolerancja",
+    color = "Typ opcji"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+
+# Tabela wyników
+kable(
+  min_rehedges_table_full,
+  col.names = c("Typ opcji", "Tolerancja", "Minimalna liczba rehedgingów"),
+  caption = "Minimalna liczba rehedgingów zapewniająca spełnienie warunku z prawdopodobieństwem co najmniej 95%"
+)
+```
+
+Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarczy przeprowadzać rehedging dużo rzadziej niż każdego dnia. Ciekawym przypadkiem jest poziom tolerancji $\varepsilon = 10$. Niezależnie od częstotliwości hedgowania, nie jesteśmy w stanie osiągnąć żądanego wcześniej prawdopodobieństwa. Dla większych tolerancji jest to osiągane.
+
+### Podrozdział ...
+
+## Porównanie z rzeczywistymi notowaniami WIG20
+
+### Podrozdział ...
+
+## Podsumowanie
+
+\newpage
+
+# Część B - Delta-Gamma-Hedging opcji call na WIG20 z wykorzystaniem opcji binarnych
+
+(Dokładny opis zadania, scenariusz sytuacji, tj. inwestycji, którą zabezpieczamy)
+
+W tej części będziemy chcieli się zabezpieczyć nie tylko samym aktywem bazowym, to jest indeksem WIG20, ale również z poczatku jedną, a w następnych momentach wieloma opcjami binarnymi. Dodatkowo wprowadzamy w tej części koszty transakcyjne w wysokości 0.4% przy obrocie w dowolną stronę. Będziemy chcieli stosować tzw. delta-gamma hedging, a więc nie będziemy chcieli zerować tylko delty samego portfela, ale i gammę, co jest druga pochodną ceny portfela po cenie aktywa bazowego. 
+## Założenia dotyczące rynku
+
+(Opis instrumentów jakie mamy do dyspozycji (inwestycja wolna od ryzyka, opcje zwykłe i binarne, indeks), możliwości częstości re-hedgingu, opłaty transakcyjne)
+
+Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
+
+$$ 
+  \frac{\partial \Pi}{\partial S} = - \frac{\partial V}{\partial S}+ \alpha + \beta \frac{\partial B}{\partial S} = 0
+$$
+$$ 
+\frac{\partial^2 \Pi}{\partial S^2} = - \frac{\partial^2 V}{\partial S^2} + \beta \frac{\partial^2 B}{\partial S^2} = 0
+$$
+gdzie 
+* S - cena aktywa bazowego
+* V - cena zabezpieczanej opcji waniliowej
+* $\Pi$ - wartość całego portfela
+* B - cena opcji binarnej
+* $\alpha$ - ilość posiadanego aktywa bazowego
+* $\beta$ - ilość posiadanych opcji binarnych
+
+Dla jednej opcji binarnej $\alpha$ i $\beta$ są wyznaczone jednoznacznie:
+$$
+  \alpha = \Delta_V - \beta \Delta_B
+$$
+$$
+  \beta = \frac{\Gamma_V}{\Gamma_B}
+$$
+Gdzie $\Gamma_B$ i $\Gamma_V$ to gammy odpowiednio opcji binarnych i waniliowych, natomiast $\Delta_B$ i $\Delta_V$ to delty odpowiednio dla tych opcji. Tak natomiast wyglądają wzory na gammy opcji binarnych i europejskich:
+$$
+  \Gamma_{Call} = \Gamma_{Put} = \frac{N'(d_1)}{S \sigma \sqrt{T-t}}
+$$
+$$
+  \Gamma_{BinaryPut} = - \Gamma_{BinaryCall} = \frac{d_1 N'(d_2)}{\sigma^2 S^2 (T-t)}
+$$
+$$
+  \Delta_{Call} = N(d_1) = \Delta_{Put} +1
+$$
+$$
+  \Delta_{BinaryCall} = -\Delta_{BinaryPut} = \frac{N'(d_2)}{\sigma S \sqrt{T-t}}
+$$
+gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
+
+#GAMMA HEDGE
+#wiem, że funkcje się powtarzają
+
+#pobranie danych
+wig20_data <- read_csv('wig20_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+#zwroty
+wig20_data <- wig20_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+wig20_data$Zwrot[1] <- 0
+
+#zwroty
+periods <- c('2021', '2020', '2019', '2018')
+drift_vol_estimates <- data.frame(matrix(ncol = length(periods), nrow = 2))
+colnames(drift_vol_estimates) <- periods
+rownames(drift_vol_estimates) <- c("mu", "sigma")
+
+#estymacja średnich i warjancji 
+for (i in seq_along(periods)) {
+  rok <- periods[i]
+  
+  dane_okres <- wig20_data %>%
+    filter(year(Data) >= as.numeric(rok) & year(Data) <= 2021)
+  
+  n_obs <- nrow(dane_okres)
+  dt <- i / n_obs
+  
+  drift_vol_estimates["mu", rok] <- mean(dane_okres$Zwrot) / dt
+  drift_vol_estimates["sigma", rok] <- sd(dane_okres$Zwrot) / sqrt(dt)
+}
+
+#współczynniki d1 i d2
+d1 <- function(S, K, r, sigma, T) {
+  (log(S/K) + (r + 0.5*sigma^2)*T) / (sigma*sqrt(T))
+}
+
+d2 <- function(S, K, r, sigma, T) {
+  d1(S,K,r,sigma,T) - sigma*sqrt(T)
+}
+
+#wartości opcji
+call_price <- function(S, K, r, sigma, T) {
+  S * pnorm(d1(S,K,r,sigma,T)) -
+    K * exp(-r*T) * pnorm(d2(S,K,r,sigma,T))
+}
+
+call_delta <- function(S, K, r, sigma, T) {
+  pnorm(d1(S,K,r,sigma,T))
+}
+
+#opcje binarne
+binary_call_price <- function(S, K, r, sigma, T) {
+  exp(-r*T) * pnorm(d2(S,K,r,sigma,T))
+}
+
+binary_call_delta <- function(S, K, r, sigma, T) {
+  dnorm(d2(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
+}
+
+#gammy
+call_gamma <- function(S, K, r, sigma, T) {
+  dnorm(d1(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
+}
+
+binary_call_gamma <- function(S, K, r, sigma, T) {
+  -dnorm(d2(S,K,r,sigma,T)) * d1(S,K,r,sigma,T) / (S^2 * sigma^2 * T)
+}
+
+#gamma-delta-hedging
+gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
+  n <- nrow(S_paths)
+  m <- ncol(S_paths)
+  dt <- T / (m - 1)
+  
+  # wynik: P&L
+  PnL <- matrix(0, n, m)
+  
+  for (i in 1:n) {
+    S <- S_paths[i, ]
+    
+    # początkowe wartości
+    V <- call_price(S[1], K, r, sigma, T)
+    
+    phi_prev <- 0
+    w_prev <- 0
+    
+    for (t in 1:(m-1)) {
+      tau <- max(T - (t-1) * dt, dt)
+      
+      # ceny opcji
+      C1_t <- call_price(S[t], K, r, sigma, tau)
+      C2_t <- binary_call_price(S[t], K, r, sigma, tau)
+      
+      C1_next <- call_price(S[t+1], K, r, sigma, tau - dt)
+      C2_next <- binary_call_price(S[t+1], K, r, sigma, tau - dt)
+      
+      # greki
+      delta1 <- call_delta(S[t], K, r, sigma, tau)
+      gamma1 <- call_gamma(S[t], K, r, sigma, tau)
+      
+      delta2 <- binary_call_delta(S[t], K, r, sigma, tau)
+      gamma2 <- binary_call_gamma(S[t], K, r, sigma, tau)
+      
+      gamma2 <- max(abs(gamma2), 1e-8) * sign(gamma2)
+      
+      # nowe pozycje
+      w <- -gamma1 / gamma2
+      w <- w / (1 + abs(w)/50)
+      phi <- -(delta1 + w * delta2)
+      
+      # koszty transakcyjne
+      cost <- cost_rate * (
+        abs(phi - phi_prev) * S[t] +
+          abs(w - w_prev) * C2_t
+      )
+      
+      # update portfela
+      V <- V +
+        phi * (S[t+1] - S[t]) +
+        w * (C2_next - C2_t) +
+        r * V * dt -
+        cost
+      
+      # zapis P&L względem opcji
+      PnL[i, t+1] <- V - C1_next
+      
+      # aktualizacja pozycji
+      phi_prev <- phi
+      w_prev <- w
+      
+    }
+  }
+  
+  return(PnL)
+}
+
+
+#Geometryczny ruch Browna
+path_gbm_wyk <- function(n, m, mu, sigma, S0 = 100, T = 1) {
+  dt <- T / m
+  
+  # losowe przyrosty
+  Z <- matrix(rnorm(n * m), nrow = n, ncol = m)
+  
+  # log-przyrosty
+  X <- (mu - 0.5 * sigma^2) * dt + sigma * sqrt(dt) * Z
+  
+  # skumulowane log-przyrosty
+  log_S <- t(apply(X, 1, cumsum))
+  
+  # dodanie log(S0) i przejście do poziomu
+  S <- S0 * exp(log_S)
+  
+  # wykres
+  matplot(t(S), type = "l", lty = 1, col = rainbow(n),
+          main = paste("Geometryczny ruch Browna"),
+          xlab = "krok", ylab = "S_t")
+}
+
+path_gbm <- function(n, m, mu, sigma, S0 = 100, T = 1) {
+  dt <- T / m
+  
+  Z <- matrix(rnorm(n * m), nrow = n, ncol = m)
+  X <- (mu - 0.5 * sigma^2) * dt + sigma * sqrt(dt) * Z
+  
+  log_S <- t(apply(X, 1, cumsum))
+  S <- S0 * exp(log_S)
+  
+  return(S)
+}
+
+plot_PnL_hist <- function(PnL_matrix, slupki) {
+  # wyciągamy P&L na koniec
+  final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
+  
+  # histogram
+  hist(final_PnL,
+       breaks = slupki,
+       main = "Histogram P&L na koniec okresu",
+       xlab = paste0("P&L, średnia = ", round(mean(final_PnL), 2)),
+       col = "blue",
+       border = "red")
+  
+  # dodatkowo: linia średniej
+  abline(v = mean(final_PnL), col = "red", lwd = 2)
+}
+
+#parametry zadania
+T <- 1
+S0 <- 1850
+n <- 1000
+m <- 52
+K <- 1900
+r <- 0.05
+koszty <- 0.004
+slupki <- 100
+
+#symulowane trajektorie
+S_paths <- path_gbm(n, m, mu=0.2, sigma=0.2, S0)
+
+#hedging
+part_B <- function(T, S0, n, m, K, r, koszty, slupki) {
+mu_est <- drift_vol_estimates["mu", "2021"]
+sigma_est <- drift_vol_estimates["sigma", "2021"]
+hedge <- gamma_delta_hedge(S_paths, K, r, sigma_est, T, koszty)
+#matplot(t(hedge), type="l", main="P&L hedgingu ", ylab="błąd hedgingu", 
+        col=rgb(0.1,0.1,0.1,alpha=0.4))
+plot_PnL_hist(hedge, slupki) 
+}
+
+
+
+## Strategie zabezpieczające 
+
+### Strategia 1.
+
+#### Analiza strategii 1.
+
+### Strategia 2.
+
+#### Analiza strategii 2.
+
+### ...
+
+## Porównanie strategii ze zwykłym delta-hedgingiem
+
+## Podsumowanie
+
+\newpage
+
+# Dodatek
+
+## Rozwiązanie równania Blacka-Scholesa i wzory na delty w portfelu zabezpieczającym
+
+W części A w zwięzły sposób wyprowadziliśmy równanie Blacka-Scholesa oraz przedstawiliśmy skład portfela zabezpieczającego, który repilkuje payoff pewnej opcji. Implementacja strategii zabezpieczającej, którą również w tej części analizowaliśmy, wymaga znajomości dokładnych wartości numerycznych wartości opcji $V$ (czyli rozwiązania wspomnianego równania Blacka-Scholesa) oraz jej pochodnej po $S$, czyli $\frac{\partial V}{\partial S}$ - poniżej przedstawiamy dokładne wzory analityczne tych funkcji:
+$$
+C = SN(d_1) - Ke^{-rT}N(d_2)
+$$
+$$
+P = -SN(-d_1) + Ke^{-rT}N(-d_2)
+$$
+$$
+d_1 = \frac{\text{log}(S/K) + (r - \frac{\sigma^2}{2})T}{\sigma \sqrt{T}}, \;\;\;\;\;\;\; d_2 = d_1 - \sigma \sqrt{T}
+$$
+gdzie $C$ i $P$ są odpowiednio wartościami (cenami) opcji call i put w chwili $0$, $T$ jest czasem do zapadnięcia opcji, $K$ jest ceną wykonania, $r$ stopą wolną od ryzyka, $\sigma$ zmiennością indeksu WIG20, a $N(x)$ jest wartością dystrybuanty standardowego rozkładu normalnego w punkcie $x$. Wówczas, odpowiednie delty, czyli przy przyjętych oznaczeniach $\frac{\partial C}{\partial S}$ i $\frac{\partial P}{\partial S}$ mają postać:
+$$
+\frac{\partial C}{\partial S} = N(d_1), \;\;\;\;\;\;\; \frac{\partial P}{\partial S} = N(d_1) - 1
+$$
+
+## Symulacje notowań aktywów
+
+W tym rozdziale krótko opisujemy metody symulacji notowań wykorzystywane w poprzednich rozdziałach; wszystkie z nich można podzielić na tzw. metodę standardową oraz na metodę bootstrappową - pierwsza z nich odnosi się do symulowania Geometrycznego Ruchu Browna, którego odpowiednia parametryzacja umożliwia modelowanie notowań wielu różnorodnych aktywów, a druga odnosi się do korzystania z procedury bootstrapingu, czyli z próbkowania ze zbioru danych historycznych danego aktywa w celu generowania nowych notowań. Szczegóły dla odrębnych zastosowań obu metod przedstawiamy w poniższych podrozdziałach. 
+
+### Symulacje notowań pojedynczego aktywa
+
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań pojedynczego aktywa.
+
+#### Symulacje metodą standardową (Geometryczny Ruch Browna)  
+$\\$
+$\\$
+Symulacje przeprowadzone metodą standardową opieramy o założenie, że rozwój notowań danego aktywa opisuje proces stochastyczny znany jako Geometryczny Ruch Browna - proces ten spełnia następujące stochastyczne równanie różniczkowe:
+$$
+dS_t = \mu S_t dt + \sigma S_t dX_t
+$$
+gdzie $dX_t$ jest ruchem Browna, a $\mu$ i $\sigma$ są stałymi. Aby uzyskać wiarygodne symulacje musimy zatem znać przynajmniej przybliżone wartości $\mu$ i $\sigma$ - jesteśmy w stanie je oszacować korzystając ze standardowych estymatorów:
+$$
+R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}}, \;\;\; \hat{\mu} = \frac{1}{n \Delta t}\sum_{i = 1}^nR_i, \;\;\; \hat{\sigma} = \sqrt{\frac{1}{(n - 1) \Delta t}\sum_{i = 1}^n(R_i - \hat{\mu})^2}
+$$
+gdzie $R_i$ jest $i$-tym zwrotem, a $\Delta t$ odstępem czasowym między kolejnymi notowaniami (dla każdego roku mamy średnio 250 notowań, czyli średnio $\Delta t = \frac{1}{250}$). Po przeprowadzeniu estymacji parametrów jesteśmy w stanie przystąpić do symulacji Geometrycznego Ruchu Browna; jego symulację opieramy o analityczne rozwiązanie charakteryzującego go równania różniczkowego:
+$$
+S_t = S_{0}\; \text{exp}((\mu - \frac{\sigma ^ 2}{2}) t + \sigma X_t)
+$$
+Symulując przybliżone realizacje $X_t$ (ruchu Browna) oraz korzystając z wyestymowanych wartości $\hat{\mu}$ i $\hat{\sigma}$ jesteśmy w stanie wyznaczyć przybliżoną wartość realizacji $S_t$ dla dowolnego $t \in T$.
+
+#### Symulacje metodą bootstrap  
+$\\$
+$\\$
+Symulucje przeprowadzone metodą bootstrappową opieramy o fakt, że notowania aktywa jestesmy w stanie przedstawić jako iloczyn pewnej wartości początkowej i ciągu ułamkowych zmian notowań. W celu wygenerowania pojedynczej trajektorii, losujemy pewną liczbę elementów ze zbioru historycznych zwrotów $\{R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}} : i \in I \}$ (gdzie $I$ definiuje okres, z którego przyrosty będziemy losować), a następnie wyznaczamy wartość notowania w momencie $t_n$ mnożąc wartość początkową $S_0$ i przeskalowane wylosowane przyrosty:
+$$
+S_{t_n} = S_{0}(1 + R_{i_{1}})(1 + R_{i_{2}})...(1 + R_{i_{n}}) = S_0 \frac{S_{i_{1}}}{S_{i_{1} - 1}}\frac{S_{i_{2}}}{S_{i_{2} - 1}}...\frac{S_{i_{n}}}{S_{i_{n} - 1}}
+$$
+
+### Symulacje notowań dwóch aktywów skorelowanych
+
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi 0.69723 (?), co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około 71% zgodności.
+
+#### Symulacje metodą standardową (skorelowane Geometryczne Ruchy Browna)  
+$\\$
+$\\$
+Metoda standardowa symulacji dwóch aktywów skorelowanych jest analogiczna do tej z przypadku pojedynczego aktywa - również przyjmujemy założenie, że rozwój notowań obu aktywów jest opisany przez Geometryczny Ruch Browna charakteryzowany przez pewne stałe $\mu_1, \sigma_1$ dla aktywa pierwszego oraz $\mu_2, \sigma_2$ dla aktywa drugiego (analogicznie jak w przypadku pojedynczego aktywa estymujemy te parametry na podstawie danych historycznych). Aby uwzględnić korelację (opisywaną przez parametr $\rho$, który jesteśmy w stanie oszacować analogicznie jak parametry $\mu$ i $\sigma$) między dwoma aktywami musimy przedstawić opisujące je procesy stochasyczne w odpowiedni sposób - załóżmy, że $B_t^{(1)}$ i $B_t^{(2)}$ są niezależnymi ruchami Browna oraz 
+$$
+X_t^{(1)} = B_t^{(1)}, \;\;\;  \;\;\; X_t^{(2)} = \rho B_t^{(1)} + \sqrt{1 - \rho^2}B_t^{(2)}.
+$$
+Wówczas, $S_t^{(1)}$ i $S_t^{(2)}$, czyli Geometryczne Ruchy Browna opisujące notowania rozważanych aktywów spełniają poniższy układ równań:
+$$
+dS_t^{(1)} = S_t^{(1)}\mu_1 dt + S_t^{(1)} \sigma_1 dX_t^{(1)}
+$$
+$$
+dS_t^{(2)} = S_t^{(2)}\mu_2 dt + S_t^{(2)} \sigma_1 dX_t^{(2)}
+$$
+W oparciu o te dwa równania oraz sposób konstrukcji $X_t^{(1)}$ i $X_t^{(2)}$, jesteśmy w stanie dokonać symulacji przykładowych realizacji $S_t^{(1)}$ i $S_t^{(2)}$, w sposób analogiczny do tego z przypadku symulowania metodą standardową notowań pojedynczego aktywa.
+
+#### Symulacje metodą bootstrap  
+$\\$
+$\\$
+Symulacje metodą bootstrap dla dwóch skorelowanych aktywów ma sens jedynie wtedy, gdy zamiast losować jakieś momenty dla pierwszego i drugiego zwrotu, losujemy jakiś jeden moment dla obydwu aktywów. W ten sposób uzyskujemy historyczny moment rzeczywistego skorelowania obu aktywów, gdyż wzrost jednego z nich, mimo dodatniej korelacji, nie implikuje wzrost drugiego. Historyczne zwroty pokazują właśnie tą zależność, o czym jest wspomniane w podrozdziale "Symulacje notowań dwóch aktywów skorelowanych".   
+Symulacje przeprowadzone metodą bootstrappową dla dwóch aktywów skorelowanych przeprowadzamy analogicznie do przypadku bootstrapowego symulowania notowań pojedynczego aktywa z niewielką zmianą, która umożliwia uchwycenie trendu (skorelowania) w symulacji: mając dwa zbiory indeksowanych zwrotów:
+$$
+R^{(1)} = \{R_i^{(1)} = \frac{S_{i}^{(1)} - S_{i - 1}^{(1)}}{S_{i - 1}^{(1)}} : i \in I \}
+$$
+$$
+R^{(2)} = \{R_i^{(2)} = \frac{S_{i}^{(2)} - S_{i - 1}^{(2)}}{S_{i - 1}^{(2)}} : i \in I \}
+$$
+odpowiednio aktywów $S^{(1)}$ i $S^{(2)}$, losujemy ciąg indeksów $(i_1, ..., i_n)$ ze zbioru $I$, a następnie wyznaczamy wartości $S_t^{(1)}$ i $S_t^{(2)}$ analogicznie jak w przypadku symulacji notowań pojedynczego aktywa:
+$$
+S_{t_n}^{(1)} = S_{0}^{(1)}(1 + R_{i_{1}}^{(1)})(1 + R_{i_{2}}^{(1)})...(1 + R_{i_{n}}^{(1)})
+$$
+$$
+S_{t_n}^{(2)} = S_{0}^{(2)}(1 + R_{i_{1}}^{(2)})(1 + R_{i_{2}}^{(2)})...(1 + R_{i_{n}}^{(2)}).
+$$
+Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane..
+
+
