@@ -396,7 +396,6 @@ cat("\\paragraph{Podsumowanie predykcji na 1 rok}\n")
 
 ```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 reset = 3
-# Dane historyczne (2021)
 dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 dane_2021_zwroty <- dane_2021_zwroty[is.finite(dane_2021_zwroty)]
 
@@ -410,17 +409,29 @@ boot_mat <- bootstrap_simulations_list[[1]]
 boot_returns <- as.vector((boot_mat[-1, ] - boot_mat[-nrow(boot_mat), ]) / boot_mat[-nrow(boot_mat), ])
 boot_returns <- boot_returns[is.finite(boot_returns)]
 
-# Parametry do krzywej normalnej
-mu_hist <- mean(dane_2022$Zwrot)
-sd_hist <- sd(dane_2022$Zwrot)
+# Zakres x wspólny
 x_seq <- seq(-0.06, 0.06, length.out = 100)
-p_norm <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_hist, sd = sd_hist))
+
+# Krzywa normalna dla HISTORYCZNYCH (2022)
+mu_hist <- mean(dane_2022$Zwrot, na.rm = TRUE)
+sd_hist <- sd(dane_2022$Zwrot, na.rm = TRUE)
+p_norm_hist <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_hist, sd = sd_hist))
+
+# Krzywa normalna dla GBM
+mu_sim <- mean(sim_returns)
+sd_sim <- sd(sim_returns)
+p_norm_sim <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_sim, sd = sd_sim))
+
+# Krzywa normalna dla BOOTSTRAP
+mu_boot <- mean(boot_returns)
+sd_boot <- sd(boot_returns)
+p_norm_boot <- data.frame(x = x_seq, y = dnorm(x_seq, mean = mu_boot, sd = sd_boot))
 
 # Histogram 1: Historyczne
 hist1 <- ggplot() +
   geom_histogram(aes(x = dane_2022$Zwrot, y = after_stat(density)), 
                  bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
-  geom_line(data = p_norm, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  geom_line(data = p_norm_hist, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
   coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
   labs(title = "Zwroty historyczne WIG20", subtitle = "Okres: 2021", 
        x = "Zwrot", y = "Gęstość") +
@@ -432,7 +443,7 @@ hist1 <- ggplot() +
 hist2 <- ggplot() +
   geom_histogram(aes(x = sim_returns, y = after_stat(density)), 
                  bins = 30, fill = "#4ECDC4", color = "#00A896", alpha = 0.8) +
-  geom_line(data = p_norm, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  geom_line(data = p_norm_sim, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
   coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
   labs(title = "Zwroty symulowane GBM", subtitle = "Symulacja na rok 2022", 
        x = "Zwrot", y = "") +
@@ -444,7 +455,7 @@ hist2 <- ggplot() +
 hist3 <- ggplot() +
   geom_histogram(aes(x = boot_returns, y = after_stat(density)), 
                  bins = 30, fill = "#9B59B6", color = "#7D3C98", alpha = 0.8) +
-  geom_line(data = p_norm, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+  geom_line(data = p_norm_boot, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
   coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
   labs(title = "Zwroty symulowane Bootstrap", subtitle = "Symulacja na rok 2022", 
        x = "Zwrot", y = "") +
@@ -1704,7 +1715,7 @@ M_table <- 2000
 rehedge_counts <- c(250, 125, 63, 35, 12)
 
 fixed_sigma <- 0.20
-strike_values <- c(1500, 1600, 1700, 1800, 1900, 2000)
+strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
 
 strike_grid <- expand.grid(
   strike = strike_values,
@@ -1751,7 +1762,7 @@ kable(
 cat("\n\n")
 
 fixed_strike <- 1800
-sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.30)
+sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.70)
 
 sigma_grid <- expand.grid(
   sigma = sigma_values,
@@ -1807,8 +1818,8 @@ rehedge_counts <- c(250, 125, 63, 35, 12)
 
 
 fixed_sigma <- 0.20
-strike_values <- c(1500, 1600, 1700, 1800, 1900, 2000)
-
+strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
+#c(1500, 1600, 1700, 1800, 1900, 2000)
 strike_grid <- expand.grid(
   strike = strike_values,
   rehedges = rehedge_counts
@@ -1900,7 +1911,7 @@ kable(
 )
 ```
 
-Jak widać z powyższych tabel, wzrost zmienności wpływa na rozkład wartości błędu hedgingowego podobnie jak wzrost ceny wykonania opcji. 
+Jak widać z powyższych tabel, wzrost zmienności wpływa na rozkład wartości błędu hedgingowego podobnie jak wzrost ceny wykonania opcji. Tutaj także różnice między opcją CALL i PUT są marginalne. Z dosyć dobrą dokładnością rozkłady dla obydwu typów opcji są jednakowe.  
 
 ### Podrozdział ...
 
@@ -1922,6 +1933,7 @@ for (j in 1:M) {
 }
 
 ```
+
 ```{r new_hedging_functions, echo=FALSE, cache=TRUE}
 BS_price <- function(S, K, r, sigma, tau, option_type) {
   if (tau <= 0) {
