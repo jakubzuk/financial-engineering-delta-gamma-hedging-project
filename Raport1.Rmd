@@ -2262,6 +2262,8 @@ $$
 $$
 gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
 
+```{r, echo=FALSE, cache=TRUE}
+
 #GAMMA HEDGE
 #wiem, że funkcje się powtarzają
 
@@ -2399,8 +2401,9 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
   
   return(PnL)
 }
+```
 
-
+```{r, echo=FALSE, cache=TRUE}
 #Geometryczny ruch Browna
 path_gbm_wyk <- function(n, m, mu, sigma, S0 = 100, T = 1) {
   dt <- T / m
@@ -2434,7 +2437,9 @@ path_gbm <- function(n, m, mu, sigma, S0 = 100, T = 1) {
   
   return(S)
 }
+```
 
+```{r, echo=FALSE, cache=TRUE}
 plot_PnL_hist <- function(PnL_matrix, slupki) {
   # wyciągamy P&L na koniec
   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
@@ -2469,11 +2474,13 @@ part_B <- function(T, S0, n, m, K, r, koszty, slupki) {
 mu_est <- drift_vol_estimates["mu", "2021"]
 sigma_est <- drift_vol_estimates["sigma", "2021"]
 hedge <- gamma_delta_hedge(S_paths, K, r, sigma_est, T, koszty)
-#matplot(t(hedge), type="l", main="P&L hedgingu ", ylab="błąd hedgingu", 
+matplot(t(hedge), type="l", main="P&L hedgingu ", ylab="błąd hedgingu", 
         col=rgb(0.1,0.1,0.1,alpha=0.4))
 plot_PnL_hist(hedge, slupki) 
 }
 
+part_B(T, S0, n, m, K, r, koszty, slupki)
+```
 
 
 ## Strategie zabezpieczające 
