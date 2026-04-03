@@ -176,7 +176,7 @@ market_sigma = 0.2
 r = 0.05
 t = 1
 n = 250
-M = 500
+M = 100
 K = 1800
 beta_limit = 10^4
 
@@ -201,21 +201,23 @@ for (i in 1:length(epsilon_range)) {
 # Ta zmienna sluzy do tego, ze czasami (przy bardzo rzadkich trajektoriach) w gamma-hedgingu, przez zabezpieczanie opcjami binarnymi
 # mozemy uzyskac duzy profit, ktory zaburza statystyki (sztucznie podnosi srednia roznice miedzy portfelem a payoffem opcji), wiec
 # przyjmujac np. positive_limit = 100 mozemy wyeliminowac takie obserwacje (dla positive_limit = Inf rozwazamy wszystkie obserwacje)
-positive_limit = Inf
+positive_limit = 50
 
 # Wyznaczanie danych (to sie chwilke kompiluje, u mnie dla M = 100 tak z 5 minut)
 for (i in 1:length(epsilon_range)) {
   for (j in 1:length(strike_premium_range)) {
-    gamma_hedging_data_list[[i]][[j]] = BS_gamma_hedging_algorithm(epsilon_range[i], transaction_fee, S0,
-                                                                   mu, pricing_sigma, market_sigma, r, t,
-                                                                   n, M, K, strike_premium = strike_premium_range[j],
-                                                                   beta_upper_limit = beta_limit)
+    #gamma_hedging_data_list[[i]][[j]] = BS_gamma_hedging_algorithm(epsilon_range[i], transaction_fee, S0,
+    #                                                               mu, pricing_sigma, market_sigma, r, t,
+    #                                                               n, M, K, strike_premium = strike_premium_range[j],
+    #                                                               beta_upper_limit = beta_limit)
     
     gamma_hedging_means_matrix[i, j] = mean((gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]])[gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
     gamma_hedging_sds_matrix[i, j] = sd((gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]])[gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
     gamma_hedging_mean_betas_matrix[i, j] = mean(gamma_hedging_data_list[[i]][[j]][[7]][, gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
   }
 }
+
+
 
 
 library(ggplot2)
@@ -228,14 +230,14 @@ df_sds$Var2 = factor(df_sds$Var2)
 # Mapa ciepla odchylen standardowych roznic miedzy wartoscia portfela a payoffem opcji
 sds_plot = ggplot(df_sds, aes(Var1, Var2, fill = value)) +
   geom_tile() +
-  geom_text(aes(label = round(value, 1)), size = 3) +  # <-- TU
+  geom_text(aes(label = round(value, 1)), size = 3) +
   coord_fixed() + ylab(bquote(epsilon)) + xlab('K*') + 
   labs(title = "Odchylenie standardowe roznicy miedzy portfelem zabezpieczajacym \na payoffem opcji zabezpieczanej (call, K = 1800), \nGamma-Hedging z danym epsilonem (kontrolujacym band) \ni parametrem K* modyfikujacym strike'i opcji binarnych",
        subtitle = bquote("Parametry rynku: " ~ sigma ~ '= 0.2' ~ mu ~ '= 0.1' ~ 'r = 0.05')) +
   scale_fill_gradientn(
     colors = c("green", "yellow", "orange", "red"),
     values = scales::rescale(c(0, 10, 50, 300))
-  ) + scale_y_discrete(limits = rev(levels(df$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
+  ) + scale_y_discrete(limits = rev(levels(df_sds$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
   theme(legend.position = 'none', plot.title = element_text(size = 12), plot.subtitle = element_text(size = 10))
   
 
@@ -246,14 +248,14 @@ df_means$Var2 = factor(df_means$Var2)
 # Mapa ciepla srednich roznic miedzy wartoscia portfela a payoffem opcji
 means_plot = ggplot(df_means, aes(Var1, Var2, fill = value)) +
   geom_tile() +
-  geom_text(aes(label = round(value, 1)), size = 3) +  # <-- TU
+  geom_text(aes(label = round(value, 1)), size = 3) +
   coord_fixed() + ylab(bquote(epsilon)) + xlab('K*') + 
   labs(title = "Srednia roznica miedzy portfelem zabezpieczajacym \na payoffem opcji zabezpieczanej (call, K = 1800), \nGamma-Hedging z danym epsilonem (kontrolujacym band) \ni parametrem K* modyfikujacym strike'i opcji binarnych",
        subtitle = bquote("Parametry rynku: " ~ sigma ~ '= 0.2' ~ mu ~ '= 0.1' ~ 'r = 0.05')) +
   scale_fill_gradientn(
     colors = c("red", "orange", "yellow", "green"),
     values = scales::rescale(c(-500, -75, -30, -10))
-  ) + scale_y_discrete(limits = rev(levels(df$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
+  ) + scale_y_discrete(limits = rev(levels(df_means$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
   theme(legend.position = 'none', plot.title = element_text(size = 12), plot.subtitle = element_text(size = 10))
 
 # Wyswietlenie wykresow
