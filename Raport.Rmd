@@ -1631,9 +1631,8 @@ Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak sko
 #   wyznaczamy ją ze wzoru Blacka-Scholesa), real_prices - wartości kolejnych notowań
 #   WIG20 (jeśli nic nie podamy, to symulujemy ją funkcją gbm_simulation, tak jak w poprzednich rozdziałach)
 #   option_type - typ opcji, 'C' (call, czyli domyślnie), w przeciwnym wypadku put
-BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
+BS_delta_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, pricing_sigma, market_sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
   
-  #   Funkcja, która wyznacza wartość opcji według wzoru Blacka-Scholesa
   BS_price = function(S, K, r, sigma, t_total, t, option_type) {
     d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
     d2 = d1 - sigma * (t_total - t)^(1/2)
@@ -1642,13 +1641,25 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
     else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
   }
   
-  #   Funkcja, która wyznacza wartość delty opcji według wzoru Blacka-Scholesa 
   BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
     if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
     else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
   }
   
-  if ((n < 2) | (n > t*250) | ((!is.na(real_prices)) & (n > t*length(real_prices)))) {
+  BS_gamma = function(S, K, r, sigma, t_total, t) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    return(dnorm(d1)/(sigma * S * sqrt(t_total - t)))
+  }
+  
+  BS_binary_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(exp(-r * (t_total - t))*pnorm(d2))}
+    else {return(exp(-r * (t_total - t))*(1 - pnorm(d2)))}
+  }
+  
+  if ((n < 2) | (prod(is.na(real_prices)) & (n > t*250)) | ((!prod(is.na(real_prices))) & (n > t*length(real_prices)))) {
     message('n (częstość aktualizowania portfela) za niska lub za wysoka')
     stop()
   }
@@ -1662,39 +1673,61 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
   #   final_price_diffs - wektor zawierający roznice między payoffem replikowanej opcji,
   #   a wartością naszego portfela replikującego
   deltas_matrix = matrix(nrow = n, ncol = m)
+  gammas_matrix = matrix(nrow = n, ncol = m)
   cashs_matrix = matrix(nrow = n, ncol = m)
+  option_values_matrix = matrix(nrow = n, ncol = m)
   final_price_diffs = numeric(m)
+  transactions = numeric(m)
+  transaction_costs = numeric(m)
   
   #   Pętla wykonująca algorytm m razy
   for (j in 1:m) {
     
     #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
-    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, 250, 1))}
+    if (!!prod(is.na(real_prices))) {price_path = c(gbm_simulation(S0, mu, market_sigma, t, 250, 1))}
     else {price_path = real_prices}
     
     tstep = 0
     dt = t/n
     
-    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
-    if (is.na(option_premium)) {cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)}
-    else {cashs_matrix[1, j] = option_premium}
-    
     #   Ustalenie wartości początkowych portfela
-    cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)
-    deltas_matrix[1, j] = BS_delta(S0, K, r, sigma, t, tstep, option_type)
-    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*S0
+    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
+    if (is.na(option_premium)) {
+      cashs_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+      option_values_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+    }
+    else {
+      cashs_matrix[1, j] = option_premium
+      option_values_matrix[1, j] = option_premium
+    }
+    deltas_matrix[1, j] = BS_delta(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*price_path[1]
+    
+    transactions[j] = transactions[j] + 1
+    transaction_costs[j] = transaction_costs[j] + transaction_fee * deltas_matrix[1, j] * price_path[1]
     
     #   Pętla wykonująca aktualizację stanu portfela (re-hedging)
     for (i in 1:(n - 1)) {
       
       #   Zwiększenie momentu czasowego
       tstep = tstep + dt
+      
+      option_values_matrix[i + 1, j] = BS_price(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
+      
       #   Wyznaczamy nową deltę
-      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, sigma, t, tstep, option_type)
+      if (abs(BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type) - deltas_matrix[i, j]) < epsilon) {
+        deltas_matrix[i + 1, j] = deltas_matrix[i, j]
+        cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt)
+        next
+      }
+      
+      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
       #   Aktualizujemy stan środków finansowych: wcześniej posiadane środki zwiększamy o odsetki i odejmujemy
       #   różnicę między pieniędzmi wydanymi na nową deltę a tymi uzyskanymi ze sprzedaży starej
       cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1]
       
+      transactions[j] = transactions[j] + 1
+      transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(deltas_matrix[i, j] - deltas_matrix[i + 1, j]) * price_path[floor(length(price_path)*tstep) + 1]
     }
     
     #   Wyznaczenie payoffu w zależności od typu opcji
@@ -1710,79 +1743,113 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
   
   #   Zwracamy wektor różnic między wartością portfela a payoffem i macierze zawierające
   #   dane o składnie portfela w każdej chwili
-  return(list(final_price_diffs, deltas_matrix, cashs_matrix)) 
+  return(list(final_price_diffs, deltas_matrix, cashs_matrix, transactions, transaction_costs, option_values_matrix))
 }
 ```
 
 ```{r, echo = FALSE, cache=TRUE}
+transaction_fee = 0.004
 mu = 0
 sigma = 0.2
 r = 0.05
 t = 1
-#M = 10000
+M = 10000
 K = 1800
 
 call_rehedging_data = list(
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]])
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')
 )
 
 put_rehedging_data = list(
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]])
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
 )
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
-call_plot1 = ggplot(call_rehedging_data[[1]], aes(x = c(call_rehedging_data[[1]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot1 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[1]][[1]]) - as.vector(call_rehedging_data[[1]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[1]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot2 = ggplot(call_rehedging_data[[2]], aes(x = c(call_rehedging_data[[2]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
 
-call_plot3 = ggplot(call_rehedging_data[[3]], aes(x = c(call_rehedging_data[[3]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot2 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[2]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[2]][[1]]) - as.vector(call_rehedging_data[[2]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[2]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot4 = ggplot(call_rehedging_data[[4]], aes(x = c(call_rehedging_data[[4]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot3 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[3]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[3]][[1]]) - as.vector(call_rehedging_data[[3]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[3]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot5 = ggplot(call_rehedging_data[[5]], aes(x = c(call_rehedging_data[[5]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot4 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[4]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[4]][[1]]) - as.vector(call_rehedging_data[[4]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[4]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot6 = ggplot(call_rehedging_data[[6]], aes(x = c(call_rehedging_data[[6]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot5 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[5]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[5]][[1]]) - as.vector(call_rehedging_data[[5]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[5]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
+
+call_plot6 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[6]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[6]][[1]]) - as.vector(call_rehedging_data[[6]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("1 re-hedging w ciągu roku", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(call_rehedging_data[[6]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
 
 
 (call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6) +
@@ -1798,47 +1865,80 @@ call_plot6 = ggplot(call_rehedging_data[[6]], aes(x = c(call_rehedging_data[[6]]
 
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
-put_plot1 = ggplot(put_rehedging_data[[1]], aes(x = c(put_rehedging_data[[1]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
 
-put_plot2 = ggplot(put_rehedging_data[[2]], aes(x = c(put_rehedging_data[[2]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+put_plot1 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.5) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[1]][[1]]) - as.vector(put_rehedging_data[[1]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.5)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[1]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[1]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-put_plot3 = ggplot(put_rehedging_data[[3]], aes(x = c(put_rehedging_data[[3]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+put_plot2 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[2]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[2]][[1]]) - as.vector(put_rehedging_data[[2]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[2]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[2]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+put_plot3 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[3]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[3]][[1]]) - as.vector(put_rehedging_data[[3]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[3]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[3]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-put_plot5 = ggplot(put_rehedging_data[[5]], aes(x = c(put_rehedging_data[[5]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+put_plot4 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[4]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[4]][[1]]) - as.vector(put_rehedging_data[[4]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[4]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[4]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-put_plot6 = ggplot(put_rehedging_data[[6]], aes(x = c(put_rehedging_data[[6]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+put_plot5 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[5]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.5) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[5]][[1]]) - as.vector(put_rehedging_data[[5]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.5)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[5]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[5]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
+
+put_plot6 = ggplot() +  
+  geom_histogram(aes(x = as.vector(put_rehedging_data[[6]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.5) +
+  geom_histogram(aes(x = (as.vector(put_rehedging_data[[6]][[1]]) - as.vector(put_rehedging_data[[6]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.5)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "firebrick", "c2" = "red2"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("1 re-hedging w ciągu roku", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(put_rehedging_data[[6]][[1]])), 2), '\nŚrednia wartość kosztów: ', round(mean(as.vector(put_rehedging_data[[6]][[5]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
 
 
 (put_plot1 | put_plot2) / (put_plot3 | put_plot4) / (put_plot5 | put_plot6) +
@@ -1850,10 +1950,6 @@ put_plot6 = ggplot(put_rehedging_data[[6]], aes(x = c(put_rehedging_data[[6]][[1
       plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
     )
   )
-
-
-
-
 ```
 
 Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze (RACHUNEK?). Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).  
@@ -2764,26 +2860,26 @@ for (i in 1:4) {
 
 ```{r, echo=FALSE, cache=TRUE}
 risk_histograms_call_data = list(
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 100, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 100, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 100, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 100, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 100, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 100, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 100, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 100, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 100, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 100, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 100, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 100, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 100, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 100, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 100, 1900, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 100, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 100, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 100, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 100, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 100, 2700, option_premium = NA, real_prices = NA, option_type = 'C')
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1900, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_modified_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C')
 )
 
 title_details = list(
@@ -2856,6 +2952,7 @@ for (i in 1:20) {
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=8, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+test = 1
 (risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) /
 (risk_hists_list[[5]] | risk_hists_list[[6]] | risk_hists_list[[7]] | risk_hists_list[[8]]) /
 (risk_hists_list[[9]] | risk_hists_list[[10]] | risk_hists_list[[11]] | risk_hists_list[[12]]) /
