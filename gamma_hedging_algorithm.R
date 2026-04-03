@@ -176,7 +176,7 @@ market_sigma = 0.2
 r = 0.05
 t = 1
 n = 250
-M = 100
+M = 500
 K = 1800
 beta_limit = 10^4
 
