@@ -21,6 +21,8 @@ library(dplyr)
 library(purrr)
 library(tidyr)
 library(kableExtra)
+library(ggplot2)
+library(reshape2)
 ```
 
 ```{r, include=FALSE}
@@ -71,7 +73,7 @@ wig20_data %>%
 
 Jak widać, w okresie 2015-2020 indeks WIG20 wykazywał względną stabilność (poza około dwuletnim okresem spadkowym po 2015), a od 2020 charakteryzuje się stabilnym wzrostem, przerwanym dwoma znaczącymi wydarzeniami o ogromnych konsekwencjach gospodarczych, czyli pandemii COVID-19 oraz wybuchu pełnoskalowej wojny na Ukrainie.
 
-## Estymacja dryfu i zmienności indeksu WIG20
+## Estymacja dryfu i zmienności indeksu WIG20, analiza normalności
 
 Zanim przejdziemy do analizy rozkładu dziennych zwrotów indeksu i symulacji, wyznaczymy wartości tych zwrotów i na ich podstawie wyznaczymy wartości estymatorów dryfu i zmienności - parametry te będą kluczowe podczas symulacji Geometrycznych Ruchów Browna. Do wyznaczania konkretnych wartości posłużymy się notowaniami otwarcia dla każdego dnia; w szczególności, korzystamy z następujących wzorów:
 $$
@@ -123,6 +125,98 @@ rownames(drift_vol_estimates) <- c("mu", "sigma")
 ```
 
 Porównując otrzymane wartości z wcześniej omawianym wykresem notowań indeksu WIG20 łatwo zauważyć skąd się bierze ich zmiana, a w szczególności spadek wartości estymatora $\mu$ wraz z wydłużaniem okresu estymacji - biorąc zwroty z kolejnych lat przed 2021 rokiem, uwzględniamy okres, w którym nie tylko miał miejsce duży spadek wartości indeksu w ogóle (pandemia COVID-19), ale również trend zmian indeksu był negatywny (okres przed 2020).
+
+```{r, echo=FALSE, cache = TRUE, fig.width=6, fig.height=5, fig.align='center'}
+dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+dane_2021_zwroty <- dane_2021_zwroty[is.finite(dane_2021_zwroty)]
+
+dane_2020_zwroty <- wig20_data %>% filter(year(Data) %in% c(2020, 2021)) %>% pull(Zwrot)
+dane_2020_zwroty <- dane_2020_zwroty[is.finite(dane_2020_zwroty)]
+
+dane_2019_zwroty <- wig20_data %>% filter(year(Data) %in% c(2019, 2020, 2021)) %>% pull(Zwrot)
+dane_2019_zwroty <- dane_2019_zwroty[is.finite(dane_2019_zwroty)]
+
+dane_2018_zwroty <- wig20_data %>% filter(year(Data) %in% c(2018, 2019, 2020, 2021)) %>% pull(Zwrot)
+dane_2018_zwroty <- dane_2018_zwroty[is.finite(dane_2018_zwroty)]
+
+dane_list = list(
+  dane_2021_zwroty,
+  dane_2020_zwroty,
+  dane_2019_zwroty,
+  dane_2018_zwroty
+)
+
+params_list = list(
+  c(mean(dane_list[[1]]), sd(dane_list[[1]])),
+  c(mean(dane_list[[2]]), sd(dane_list[[2]])),
+  c(mean(dane_list[[3]]), sd(dane_list[[3]])),
+  c(mean(dane_list[[4]]), sd(dane_list[[4]]))
+)
+
+x_seq <- seq(-0.06, 0.06, length.out = 100)
+pnorm_data_list = list(
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[1]][1], sd = params_list[[1]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[2]][1], sd = params_list[[2]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[3]][1], sd = params_list[[3]][2])),
+  data.frame(x = x_seq, y = dnorm(x_seq, mean = params_list[[4]][1], sd = params_list[[4]][2]))
+)
+
+title_details = c('2021', '2020-2021', '2019-2021', '2018-2021')
+hists_list = list()
+for (i in 1:4) {
+  hists_list[[i]] = local({
+    i = i
+    ggplot() +
+    geom_histogram(aes(x = dane_list[[i]], y = after_stat(density)), 
+                   bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
+    geom_line(data = pnorm_data_list[[i]], aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
+    coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
+    labs(title = "Zwroty historyczne WIG20", subtitle = paste("Okres: ", title_details[i]), 
+         x = "Zwrot", y = "Gęstość") +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
+          plot.subtitle = element_text(size = 9, color = "gray50", hjust = 0.5))
+  })
+}
+
+(hists_list[[1]] | hists_list[[2]] ) / (hists_list[[3]] | hists_list[[4]])
+```
+
+(wykresy normalności zwrotów historycznych, wnioski - tylko w pierwszym przypadku widzimy dobre dopasowanie, w pozostałych przypadkach ciężkie ogony mocno wpływają na wariancję)
+
+```{r, echo=FALSE, cache = TRUE}
+shapiro_tests = list(
+  shapiro.test(dane_list[[1]]),
+  shapiro.test(dane_list[[2]]),
+  shapiro.test(dane_list[[3]]),
+  shapiro.test(dane_list[[4]])
+)
+
+
+format_pvalue <- function(p) {
+  if (p < 0.0001) {
+    format(p, scientific = TRUE, digits = 2)
+  } else {
+    round(p, 4)
+  }
+}
+
+results <- data.frame(
+  Dane = c("Zwroty historyczne (2021)", "Zwroty historyczne (2020-2021)", "Zwroty historyczne (2019-2021)", "Zwroty historyczne (2018-2021)"),
+  p_value = c(format_pvalue(shapiro_tests[[1]]$p.value), format_pvalue(shapiro_tests[[2]]$p.value), format_pvalue(shapiro_tests[[3]]$p.value), format_pvalue(shapiro_tests[[4]]$p.value)),
+  Wniosek = c(
+    ifelse(shapiro_tests[[1]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[2]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[3]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0"),
+    ifelse(shapiro_tests[[4]]$p.value > 0.05, "Nie odrzucamy H0", "Odrzucamy H0")
+  )
+)
+
+kable(results, 
+      col.names = c("Dane", "p-value", "Wniosek (alfa = 0.05)"),
+      caption = "Test Shapiro-Wilka normalności rozkładu zwrotów (4 okresy)")
+
+```
 
 ## Symulacja zmian cen indeksu WIG20
 
@@ -389,10 +483,6 @@ legend_plot_boot <- ggplot() +
 ```
 
 Analizując wykresy symulacji przeprowadzonych metodą bootstrapową dochodzimy do analogicznych wniosków jak w przypadku poprzednim - również w każdym z czterech przypadków końcowa wartość indeksu leży wyraźnie poniżej mediany (w przypadku pierwszego okresu, ponownie, nawet poniżej kwantyla pięcioprocentowego) i większość notowań oscyluje wokół krzywej kwantylowej pięcioprocentowej. Obserwacje dotyczące rozrzutu końcowych wartości symulowanych notowań są również podobne; w przypadku okresu pierwszego rozrzut jest najmniejszy, a w przypadku drugiego - największy.
-
-```{r, results='asis', include=FALSE}
-cat("\\paragraph{Podsumowanie predykcji na 1 rok}\n")
-```
 
 ```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 reset = 3
@@ -934,13 +1024,76 @@ W związku z tym, takie podejście do symulacji może skutkować lepszymi rezult
 
 ## Symulacje notowań indeksu WIG20 i akcji KGHM jako przykład dwóch skorelowanych aktywów
 
+```{r, echo=FALSE, cache = TRUE}
+# Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
+# ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
+# mozemy pozniej usunac)
+kghm_data <- read_csv('kgh_d.csv') %>%
+  mutate(Data = as.Date(Data)) %>%
+  arrange(Data)
+
+kghm_data <- kghm_data %>%
+  mutate(Zwrot = (Otwarcie - lag(Otwarcie)) / lag(Otwarcie))
+kghm_data$Zwrot[1] <- 0
+
+wig_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
+
+wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
+kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
+
+dane_okres1_zwroty <- wig20_data %>% filter(year(Data) %in% c(2019, 2020, 2021)) %>% pull(Zwrot)
+dane_okres1_zwroty <- dane_okres1_zwroty[is.finite(dane_okres1_zwroty)]
+
+dane_okres2_zwroty <- wig20_data %>% filter(year(Data) %in% c(2016, 2017, 2018)) %>% pull(Zwrot)
+dane_okres2_zwroty <- dane_okres2_zwroty[is.finite(dane_okres2_zwroty)]
+
+dane_okres3_zwroty <- wig20_data %>% filter(year(Data) %in% c(2013, 2014, 2015)) %>% pull(Zwrot)
+dane_okres3_zwroty <- dane_okres3_zwroty[is.finite(dane_okres3_zwroty)]
+
+dane_okres4_zwroty <- wig20_data %>% filter(year(Data) %in% c(2010, 2011, 2012)) %>% pull(Zwrot)
+dane_okres4_zwroty <- dane_okres4_zwroty[is.finite(dane_okres4_zwroty)]
+
+dane_kghm_okres1_zwroty <- kghm_data %>% filter(year(Data) %in% c(2019, 2020, 2021)) %>% pull(Zwrot)
+dane_kghm_okres1_zwroty <- dane_kghm_okres1_zwroty[is.finite(dane_kghm_okres1_zwroty)]
+
+dane_kghm_okres2_zwroty <- kghm_data %>% filter(year(Data) %in% c(2016, 2017, 2018)) %>% pull(Zwrot)
+dane_kghm_okres2_zwroty <- dane_kghm_okres2_zwroty[is.finite(dane_kghm_okres2_zwroty)]
+
+dane_kghm_okres3_zwroty <- kghm_data %>% filter(year(Data) %in% c(2013, 2014, 2015)) %>% pull(Zwrot)
+dane_kghm_okres3_zwroty <- dane_kghm_okres3_zwroty[is.finite(dane_kghm_okres3_zwroty)]
+
+dane_kghm_okres4_zwroty <- kghm_data %>% filter(year(Data) %in% c(2010, 2011, 2012)) %>% pull(Zwrot)
+dane_kghm_okres4_zwroty <- dane_kghm_okres4_zwroty[is.finite(dane_kghm_okres4_zwroty)]
+
+results <- data.frame(
+  cor_est = "$\\hat{\\rho}$",
+  cor1 = cor(dane_kghm_okres1_zwroty, dane_okres1_zwroty),
+  cor2 = cor(dane_kghm_okres2_zwroty, dane_okres2_zwroty),
+  cor3 = cor(dane_kghm_okres3_zwroty, dane_okres3_zwroty),
+  cor4 = cor(dane_kghm_okres4_zwroty, dane_okres4_zwroty)
+)
+```
+
 W tym krótkim podrozdziale zajmiemy się przedstawieniem interesującego zjawiska - korelacji notowań dwóch różnych aktywów. Jednym z nich jest omawiany już indeks WIG20, a drugim - akcje spółki KGHM. Ze względu na fakt, że akcje spółki KGHM wchodzą w skład indeksu WIG20 naturalnym jest oczekiwanie, że wzrost lub spadek notowań akcji KGHM będzie miało bezpośredni wpływ na notowania indeksu WIG20. Mniej oczywistym może być fakt, że podobna relacja zachodzi również w drugą stronę - replikując indeks WIG20 (tj. jego sklad, bo samym indeksem handlować nie można) handluje się w efekcie akcjami KGHM, co wpływa na ich cenę.
 
 Podstawową miarą powiązania dwóch aktywów jest współczynnik korelacji Pearsona, szeroko stosowany nie tylko w analizie rynków finansowych; obliczamy go biorąc jako zmienne dzienne zwroty obu aktywów, czyli korzystamy z następującego wzoru:
 $$
 \hat{\rho} = \dfrac{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(2)})(R_i^{(2)} - \overline{R}_i^{(1)})}{\sqrt{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(1)})^2 \sum_{i = 1}^n (R_i^{(2)} - \overline{R}_i^{(2)})^2}} = \dfrac{\hat{\text{Cov}}(R^{(1)}, R^{(2)})}{\sqrt{\hat{\sigma}^{(1)}}\sqrt{\hat{\sigma}^{(2)}}}
 $$
-Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z roku 2021 otrzymujemy wartość $\hat{\rho} \approx 0.601$. Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
+Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z wcześniej rozważanych okresów otrzymujemy następujące wartości:
+
+```{r, echo=FALSE, cache = TRUE}
+kable(results, 
+      col.names = c("", "Okres: 2019-2021", "Okres: 2016-2018", "Okres: 2013-15", "Okres: 2010-2012"),
+      caption = "Współczynniki korelacji zwrotów notowań indeksu WIG20 i notowań akcji KGHM (4 okresy)")
+```
+
+(jakiś komentarz do tego może)
+Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
+
+Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
+
 
 Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
 
@@ -1429,35 +1582,15 @@ p6 <- plot_put_hist(ST_values, strikes[6], x_limits, y_limits)
 
 # Część A - Delta-Hedging opcji call na WIG20
 
-W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytuacji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy przyjęty model cen opcji oraz strategie zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022.
+W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 - rozpoczniemy od hipotetycznej sytuacji, w której znajdujemy się w pozycji osoby handlującej opcjami (ustandaryzowanymi w ten sam sposób, co na GPW), które zapadają w grudniu 2022. Przedstawimy strategię zabezpieczającą korzystającą z indeksu WIG20 (będziemy go traktować jako aktywo, którym da się realnie handlować) oraz inwestycji wolnej od ryzyka (obligacji). Następnie przeanalizujemy rezultaty zastosowanej stategii zabezpieczającej na wysymulowanych notowaniach indeksu WIG20 w zależności od czynników takich jak częstość aktualizowania portfela zabezpieczającego i zmienność notowań aktywa bazowego. Na końcu zbadamy skuteczność przyjętej strategii na faktycznych notowaniach historycznych indeksu WIG20 z roku 2022. Wszystkie analizy przeprowadzimy dla przypadków, w których zabezpieczaną opcją jest waniliowa opcja call lub waniliowa opcja put o cenie wykonania $1700$.
 
 ## Model i strategia zabezpieczająca
 
-Rozpoczniemy od przedstawienia modelu Blacka-Scholesa, w oparciu o który będziemy w stanie skonstruować portfel zabezpieczający^[część rozdziału dotycząca wyprowadzenia modelu oraz konstrukcji portfela zabezpieczającego jest analogiczna do tej z książki Paula Wilmotta *On Quantitative Finance*, rozdział 5]. Oznaczmy przez $V$ wartość opcji (na razie nie doprecyzowujemy czy jest to opcja call, czy put) na indeks WIG20, a przez $S_t$ wartość indeksu w chwili $t$, czyli matematycznie proces stochastyczny opisujący jego notowania - zakładamy, że notowania te są pewną realizacją Geometrycznego Ruchu Browna:
-$$
-dS_t = \mu S_t dt + \sigma S_t dX_t
-$$
-gdzie $\mu$ i $\sigma$ są pewnymi stałymi, a $X_t$ ruchem Browna. Rozważmy portfel $\Pi$ składający się z pojedynczej krótkiej pozycji na opcji $V$ oraz długiej pozycji w ilości $\Delta$ indeksu WIG20:
-$$
-\Pi = V - \Delta S.
-$$
-Korzystając z formuły Ito jesteśmy w stanie pokazać, że zmiana wartości tego portfela wynosi:
-$$
-d\Pi = \frac{\partial V}{\partial t}dt + \frac{\partial V}{\partial S}dS + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2}dt - \Delta dS
-$$
-wówczas, przyjmując $\Delta = \frac{\partial V}{\partial S}$ eliminujemy ze zmiany w portfelu element losowy $dS$, co sprawia, że zmiany w portfelu są całkowicie deterministyczne, więc muszą rosnąć zgodnie ze stopą procentową bez ryzyka, tj.:
-$$
-d\Pi = r \Pi dt
-$$
-łącząc powyższe równania w całość, otrzymujemy:
-$$
-\frac{\partial V}{\partial t}  + \frac{1}{2} \sigma ^ 2 S^2 \frac{\partial^2 V}{\partial S^2} + rS\frac{\partial V}{\partial S} - rV = 0
-$$
-czyli równanie Blacka-Scholesa. Doprecyzowując odpowiednie warunki brzegowe (czyli m.in. payoff danej opcji, wskazujący na to czy jest to opcja call czy put) jestesmy w stanie wyznaczyć analityczne rozwiązanie, które umożliwia wyznaczenie wartości $V$ oraz  wartości pochodnej cząstkowej $\frac{\partial V}{\partial S}$ w dowolnej chwili $t$. Dzięki wyznaczeniu wartości opcji w ten sposób uzyskaliśmy również postać samofinansującego portfela, który replikuje jej payoff:
+Zakładamy, że spełnione są główne założenia i konsekwencje modelu Blacka-Scholesa - notowania indeksu WIG20 są pewną realizacją geometrycznego ruchu Browna, a interesującego nas instrumenty pochodne, tj. opcje, wycenione są zgodnie ze wzorami wynikającymi z owego modelu. W tym świecie, postać samofinansującego portfela, który replikuje payoff standardowej opcji waniliowej call na pewne aktywo $S$, wygląda następująco:
 $$
 \Pi = \Delta S + B = \frac{\partial V}{\partial S} S + B
 $$
-gdzie $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$. Aktualizując ten portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
+gdzie $S$ w rozważanym przez nas przypadku jest indeksem WIG20, a $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$. Jest to oczywiście standardowa strategia delta-hedgingowa. Aktualizując taki portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
 
 Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, ...,t_n$, $t_0 = 0$ oraz, że w każdej z tych chwil znamy wartość (oznaczaną przez $S_{t_i}$) indeksu WIG20. W chwili $t_0 = 0$ sprzedajemy jedną opcję o wartości $V_0$ (krótka pozycja) oraz kupujemy indeks WIG20 (długa pozycja) w ilości $\Delta_0 = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_0}$. Pozostałe środki finansowe, czyli $C_0 = V_0 - \Delta_0$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$ (w następnej chwili ich wartość wynosi więc $C_{t_1} = C_0e^{r(t_1 - t_0)}$). 
 
@@ -1476,9 +1609,8 @@ Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak sko
 #   wyznaczamy ją ze wzoru Blacka-Scholesa), real_prices - wartości kolejnych notowań
 #   WIG20 (jeśli nic nie podamy, to symulujemy ją funkcją gbm_simulation, tak jak w poprzednich rozdziałach)
 #   option_type - typ opcji, 'C' (call, czyli domyślnie), w przeciwnym wypadku put
-BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
+BS_delta_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, pricing_sigma, market_sigma, r, t, n, m, K, option_premium = NA, real_prices = NA, option_type = 'C') {
   
-  #   Funkcja, która wyznacza wartość opcji według wzoru Blacka-Scholesa
   BS_price = function(S, K, r, sigma, t_total, t, option_type) {
     d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
     d2 = d1 - sigma * (t_total - t)^(1/2)
@@ -1487,13 +1619,25 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
     else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
   }
   
-  #   Funkcja, która wyznacza wartość delty opcji według wzoru Blacka-Scholesa 
   BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
     if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
     else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
   }
   
-  if ((n < 2) | (n > t*250) | ((!is.na(real_prices)) & (n > t*length(real_prices)))) {
+  BS_gamma = function(S, K, r, sigma, t_total, t) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    return(dnorm(d1)/(sigma * S * sqrt(t_total - t)))
+  }
+  
+  BS_binary_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(exp(-r * (t_total - t))*pnorm(d2))}
+    else {return(exp(-r * (t_total - t))*(1 - pnorm(d2)))}
+  }
+  
+  if ((n < 2) | (prod(is.na(real_prices)) & (n > t*250)) | ((!prod(is.na(real_prices))) & (n > t*length(real_prices)))) {
     message('n (częstość aktualizowania portfela) za niska lub za wysoka')
     stop()
   }
@@ -1507,39 +1651,61 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
   #   final_price_diffs - wektor zawierający roznice między payoffem replikowanej opcji,
   #   a wartością naszego portfela replikującego
   deltas_matrix = matrix(nrow = n, ncol = m)
+  gammas_matrix = matrix(nrow = n, ncol = m)
   cashs_matrix = matrix(nrow = n, ncol = m)
+  option_values_matrix = matrix(nrow = n, ncol = m)
   final_price_diffs = numeric(m)
+  transactions = numeric(m)
+  transaction_costs = numeric(m)
   
   #   Pętla wykonująca algorytm m razy
   for (j in 1:m) {
     
     #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
-    if (is.na(real_prices)) {price_path = c(gbm_simulation(S0, mu, sigma, t, 250, 1))}
+    if (!!prod(is.na(real_prices))) {price_path = c(gbm_simulation(S0, mu, market_sigma, t, 250, 1))}
     else {price_path = real_prices}
     
     tstep = 0
     dt = t/n
     
-    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
-    if (is.na(option_premium)) {cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)}
-    else {cashs_matrix[1, j] = option_premium}
-    
     #   Ustalenie wartości początkowych portfela
-    cashs_matrix[1, j] = BS_price(S0, K, r, sigma, t, tstep, option_type)
-    deltas_matrix[1, j] = BS_delta(S0, K, r, sigma, t, tstep, option_type)
-    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*S0
+    #   Jeśli zadamy faktyczną cenę opcji to ją bierzemy, jeśli nie to wyznaczamy wzorem BS
+    if (is.na(option_premium)) {
+      cashs_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+      option_values_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+    }
+    else {
+      cashs_matrix[1, j] = option_premium
+      option_values_matrix[1, j] = option_premium
+    }
+    deltas_matrix[1, j] = BS_delta(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+    cashs_matrix[1, j] = cashs_matrix[1, j] - deltas_matrix[1, j]*price_path[1]
+    
+    transactions[j] = transactions[j] + 1
+    transaction_costs[j] = transaction_costs[j] + transaction_fee * deltas_matrix[1, j] * price_path[1]
     
     #   Pętla wykonująca aktualizację stanu portfela (re-hedging)
     for (i in 1:(n - 1)) {
       
       #   Zwiększenie momentu czasowego
       tstep = tstep + dt
+      
+      option_values_matrix[i + 1, j] = BS_price(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
+      
       #   Wyznaczamy nową deltę
-      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, sigma, t, tstep, option_type)
+      if (abs(BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type) - deltas_matrix[i, j]) < epsilon) {
+        deltas_matrix[i + 1, j] = deltas_matrix[i, j]
+        cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt)
+        next
+      }
+      
+      deltas_matrix[i + 1, j] = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
       #   Aktualizujemy stan środków finansowych: wcześniej posiadane środki zwiększamy o odsetki i odejmujemy
       #   różnicę między pieniędzmi wydanymi na nową deltę a tymi uzyskanymi ze sprzedaży starej
       cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (deltas_matrix[i + 1, j] - deltas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1]
       
+      transactions[j] = transactions[j] + 1
+      transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(deltas_matrix[i, j] - deltas_matrix[i + 1, j]) * price_path[floor(length(price_path)*tstep) + 1]
     }
     
     #   Wyznaczenie payoffu w zależności od typu opcji
@@ -1555,79 +1721,107 @@ BS_delta_hedging_algorithm = function(S0, mu, sigma, r, t, n, m, K, option_premi
   
   #   Zwracamy wektor różnic między wartością portfela a payoffem i macierze zawierające
   #   dane o składnie portfela w każdej chwili
-  return(list(final_price_diffs, deltas_matrix, cashs_matrix)) 
+  return(list(final_price_diffs, deltas_matrix, cashs_matrix, transactions, transaction_costs, option_values_matrix))
 }
 ```
 
 ```{r, echo = FALSE, cache=TRUE}
+transaction_fee = 0.004
 mu = 0
 sigma = 0.2
 r = 0.05
 t = 1
-#M = 10000
+M = 10000
 K = 1800
 
 call_rehedging_data = list(
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')[[1]])
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')
 )
 
 put_rehedging_data = list(
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]]),
-  as.data.frame(BS_delta_hedging_algorithm(S0, mu, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')[[1]])
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
 )
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
-call_plot1 = ggplot(call_rehedging_data[[1]], aes(x = c(call_rehedging_data[[1]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot1 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-50, 50)) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2), '\nŚrednia: ', round(mean(as.vector(call_rehedging_data[[1]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot2 = ggplot(call_rehedging_data[[2]], aes(x = c(call_rehedging_data[[2]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
 
-call_plot3 = ggplot(call_rehedging_data[[3]], aes(x = c(call_rehedging_data[[3]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot2 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[2]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-50, 50)) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2), '\nŚrednia:', round(mean(as.vector(call_rehedging_data[[2]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot4 = ggplot(call_rehedging_data[[4]], aes(x = c(call_rehedging_data[[4]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot3 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[3]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-50, 50)) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2), '\nŚrednia: ', round(mean(as.vector(call_rehedging_data[[3]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot5 = ggplot(call_rehedging_data[[5]], aes(x = c(call_rehedging_data[[5]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot4 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[4]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-50, 50)) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2), '\nŚrednia: ', round(mean(as.vector(call_rehedging_data[[4]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
-call_plot6 = ggplot(call_rehedging_data[[6]], aes(x = c(call_rehedging_data[[6]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#3498DB", color="#e9ecef", alpha=1) +
-  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
+call_plot5 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[5]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-100, 100)) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2), '\nŚrednia: ', round(mean(as.vector(call_rehedging_data[[5]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none",
+        legend.text = element_text(size = 6))
+
+call_plot6 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[6]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-100, 100)) +
+  ggtitle("1 re-hedging w ciągu roku", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2), '\nŚrednia: ', round(mean(as.vector(call_rehedging_data[[6]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none",
+        legend.text = element_text(size = 6))
 
 
 (call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6) +
@@ -1639,66 +1833,6 @@ call_plot6 = ggplot(call_rehedging_data[[6]], aes(x = c(call_rehedging_data[[6]]
       plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
     )
   )
-```
-
-
-```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
-put_plot1 = ggplot(put_rehedging_data[[1]], aes(x = c(put_rehedging_data[[1]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[1]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-put_plot2 = ggplot(put_rehedging_data[[2]], aes(x = c(put_rehedging_data[[2]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[2]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-put_plot3 = ggplot(put_rehedging_data[[3]], aes(x = c(put_rehedging_data[[3]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[3]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-put_plot4 = ggplot(put_rehedging_data[[4]], aes(x = c(put_rehedging_data[[4]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[4]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-put_plot5 = ggplot(put_rehedging_data[[5]], aes(x = c(put_rehedging_data[[5]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[5]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-put_plot6 = ggplot(put_rehedging_data[[6]], aes(x = c(put_rehedging_data[[6]][[1]]))) +  
-  geom_histogram(aes(y =..density..), binwidth=3, fill="#E74C3C", color="#e9ecef", alpha=1) +
-  ggtitle("1 re-hedging w ciągu roku (tylko jeden)", subtitle = paste('Odchylenie standardowe:', round(sd(c(call_rehedging_data[[6]][[1]])), 2))) + 
-  scale_x_continuous(limits = c(min = -50, max = 50)) +
-  scale_y_continuous(limits = c(min = 0, max = 0.18)) + xlab('') + ylab('') + theme_minimal() +
-  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8))
-
-
-(put_plot1 | put_plot2) / (put_plot3 | put_plot4) / (put_plot5 | put_plot6) +
-  plot_annotation(
-    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
-    subtitle = "Opcja PUT, cena wykonania 1800, czas do zapadnięcia 1 rok",
-    theme = theme(
-      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
-    )
-  )
-
-
-
-
 ```
 
 Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze (RACHUNEK?). Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).  
@@ -2205,9 +2339,396 @@ kable(
 
 Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarczy przeprowadzać rehedging dużo rzadziej niż każdego dnia. Ciekawym przypadkiem jest poziom tolerancji $\varepsilon = 10$. Niezależnie od częstotliwości hedgowania, nie jesteśmy w stanie osiągnąć żądanego wcześniej prawdopodobieństwa. Dla większych tolerancji jest to osiągane.
 
+```{r, echo=FALSE, cache=TRUE}
+risk_histograms_call_data = list(
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1900, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C')
+)
+
+title_details = list(
+  c(0.2, 0.15, 1800),
+  c(0.2, 0.15, 2100),
+  c(0.2, 0.15, 2400),
+  c(0.2, 0.15, 2700),
+  c(0.2, 0.2, 1800),
+  c(0.2, 0.2, 2100),
+  c(0.2, 0.2, 2400),
+  c(0.2, 0.2, 2700),
+  c(0.2, 0.25, 1800),
+  c(0.2, 0.25, 2100),
+  c(0.2, 0.25, 2400),
+  c(0.2, 0.25, 2700),
+  c(0.2, 0.3, 1800),
+  c(0.2, 0.3, 2100),
+  c(0.2, 0.3, 2400),
+  c(0.2, 0.3, 2700),
+  c(0.2, 0.35, 1800),
+  c(0.2, 0.35, 2100),
+  c(0.2, 0.35, 2400),
+  c(0.2, 0.35, 2700)
+)
+
+limits = list(
+  c(0, 120),
+  c(0, 120),
+  c(0, 120),
+  c(0, 120),
+  c(-60, 60),
+  c(-60, 60),
+  c(-60, 60),
+  c(-60, 60),
+  c(-175, 0),
+  c(-175, 0),
+  c(-175, 0),
+  c(-175, 0),
+  c(-300, 0),
+  c(-300, 0),
+  c(-300, 0),
+  c(-300, 0),
+  c(-400, 0),
+  c(-400, 0),
+  c(-400, 0),
+  c(-400, 0)
+)
+
+risk_hists_list = list()
+
+for (i in 1:20) {
+  risk_hists_list[[i]] = local({
+    i = i
+    ggplot() +
+      geom_histogram(aes(x = risk_histograms_call_data[[i]][[1]], y = after_stat(density)), 
+                     bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
+      labs(title = bquote(sigma['W'] ~ '=' ~ .(title_details[[i]][1]) ~ ',' ~ sigma['R'] ~ '=' ~ .(title_details[[i]][2]) ~ ',' ~ 'K = ' ~ .(title_details[[i]][3])), 
+           x  = paste('Odch. std. = ', round(sd(risk_histograms_call_data[[i]][[1]]), 2), '\n Srednia = ', round(mean(risk_histograms_call_data[[i]][[1]]), 2)), y = "") +
+      theme_minimal(base_size = 11) +
+      coord_cartesian(xlim = limits[[i]]) +
+      theme(plot.title = element_text(size = 7, face = "bold", color = "#C92A2A", hjust = 0.5),
+            plot.subtitle = element_text(size = 1, color = "gray50", hjust = 0.5),
+            axis.title.x = element_text(size = 7),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.y = element_blank()
+            )
+  })
+}
+```
+
+```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=8, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+test = 1
+(risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) /
+(risk_hists_list[[5]] | risk_hists_list[[6]] | risk_hists_list[[7]] | risk_hists_list[[8]]) /
+(risk_hists_list[[9]] | risk_hists_list[[10]] | risk_hists_list[[11]] | risk_hists_list[[12]]) /
+  (risk_hists_list[[13]] | risk_hists_list[[14]] | risk_hists_list[[15]] | risk_hists_list[[16]]) /
+  (risk_hists_list[[17]] | risk_hists_list[[18]] | risk_hists_list[[19]] | risk_hists_list[[20]]) 
+
+```
+
 ### Podrozdział ...
 
 ## Porównanie z rzeczywistymi notowaniami WIG20
+
+```{r, echo=FALSE, cache=TRUE}
+historic_one_year_back_sigmas = c()
+lata = c(2021, 2020, 2019, 2018)
+
+for (i in 1:4) {
+  rok <- lata[i]
+  dane_okres <- wig20_data %>%
+    filter(year(Data) == rok)
+  
+  n_obs <- nrow(dane_okres)
+  dt <- 1 / n_obs
+
+  historic_one_year_back_sigmas[i] <- sd(dane_okres$Zwrot) / sqrt(dt)
+}
+
+wig20_2022_notowania = wig20_data %>% filter(year(Data) == 2022) %>% pull(Otwarcie)
+wig20_2021_notowania = wig20_data %>% filter(year(Data) == 2021) %>% pull(Otwarcie)
+wig20_2020_notowania = wig20_data %>% filter(year(Data) == 2020) %>% pull(Otwarcie)
+wig20_2019_notowania = wig20_data %>% filter(year(Data) == 2019) %>% pull(Otwarcie)
+
+wig_historyczne_notowania_list = list(
+  wig20_2022_notowania,
+  wig20_2021_notowania,
+  wig20_2020_notowania,
+  wig20_2019_notowania
+)
+
+historical_call_hedging_data = list(
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[1], NA, 0.05, 1, 250, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[1]], option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[2], NA, 0.05, 1, 250, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[2]], option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[3], NA, 0.05, 1, 251, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[3]], option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[4], NA, 0.05, 1, 247, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[4]], option_type = 'C')
+)
+
+historical_put_hedging_data = list(
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[1], NA, 0.05, 1, 250, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[1]], option_type = 'P'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[2], NA, 0.05, 1, 250, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[2]], option_type = 'P'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[3], NA, 0.05, 1, 251, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[3]], option_type = 'P'),
+  BS_delta_hedging_algorithm(0, 0, NA, 0, historic_one_year_back_sigmas[4], NA, 0.05, 1, 247, 1, 1800, option_premium = NA, real_prices = wig_historyczne_notowania_list[[4]], option_type = 'P')
+)
+
+
+call_plots = list(
+  list(),
+  list(),
+  list(),
+  list()
+)
+
+ns = list()
+ks = list()
+ds = list()
+cs = list()
+not = list()
+wo = list()
+pv = list()
+sf = list()
+sh = list()
+
+for (i in 1:4) {
+  ns[[i]] = length(historical_call_hedging_data[[i]][[2]])
+  ks[[i]] = length(wig_historyczne_notowania_list[[i]])
+  
+  ds[[i]] = c(historical_call_hedging_data[[i]][[2]], rep(historical_call_hedging_data[[i]][[2]][ns[[i]]], ks[[i]] - ns[[i]]))
+  cs[[i]] = c(historical_call_hedging_data[[i]][[3]], rep(historical_call_hedging_data[[i]][[3]][ns[[i]]], ks[[i]] - ns[[i]]))
+  not[[i]] = c(wig_historyczne_notowania_list[[i]])
+  wo[[i]] = c(c(historical_call_hedging_data[[i]][[6]]),
+                     rep(historical_call_hedging_data[[i]][[3]][n], ks[[i]] - ns[[i]] - 1),
+                     max(wig_historyczne_notowania_list[[i]][ks[[i]]] - 1800, 0))
+  pv[[i]] = ds[[i]] * not[[i]] + cs[[i]] - wo[[i]]
+  
+  sf[[i]] <- diff(range(ds[[i]])) / diff(range(cs[[i]]))
+  sh[[i]] <- min(ds[[i]]) - min(cs[[i]]) * sf[[i]]
+}
+
+text_size = 7
+
+for (i in 1:4) {
+
+  call_plots[[i]][[1]] = local({
+    i = i
+    ggplot() +
+    geom_line(
+      aes(1:ks[[i]], ds[[i]], color = "y1"),
+      linewidth = 0.5
+    ) +
+    geom_line(
+      aes(1:ks[[i]], cs[[i]] * sf[[i]] + sh[[i]], color = "y2"),
+      linewidth = 0.5
+    ) +
+    scale_y_continuous(
+      name = "Delta",
+      sec.axis = sec_axis(
+        ~ (. - sh[[i]]) / sf[[i]],
+        name = "Gotowka"
+      ) 
+    ) + xlab('Czas (lata)') +
+    scale_color_manual(
+      name = "",
+      values = c("y1" = "blue", "y2" = "red"),
+      labels = c("y1" = "Delta", "y2" = "Gotowka")
+    ) + labs(title = 'Wykres skladu portfela wzgledem czasu',
+             subtitle =  bquote('Przyjęta zmienność w portfelu \n zabezpieczającym:' ~ sigma['w'] ~ '=' ~ .(round(historic_one_year_back_sigmas[i], 3)))) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = text_size, hjust = 0.5),
+          axis.title = element_text(size = text_size),
+          legend.position = "bottom",
+          legend.text = element_text(size = text_size)) +
+    guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+  
+  
+  call_plots[[i]][[2]] = local({
+    i = i
+    ggplot() + geom_line(
+    aes(1:ks[[i]], pv[[i]], color = "y1"),
+    linewidth = 0.5
+  ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
+    scale_color_manual(
+      name = "",
+      values = c("y1" = "black"),
+      labels = c("y1" = "Roznica miedzy wartoscia portfela replikacyjnego \n a wartoscia opcji")
+    ) + labs(title = 'Zysk/strata \n portfela repilkującego',
+             subtitle = paste('Koncowa roznica \n replikacji = ', round(historical_call_hedging_data[[i]][[1]], 2))) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = text_size, hjust = 0.5),
+          axis.title = element_text(size = text_size),
+          legend.position = "bottom",
+          legend.text = element_text(size = text_size)) +
+    guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+
+  
+  call_plots[[i]][[3]] = local({
+    i = i
+    ggplot() + geom_line(
+    aes(1:ks[[i]], wig_historyczne_notowania_list[[i]], color = "y1"),
+    linewidth = 0.5
+  ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
+    scale_color_manual(
+      name = "",
+      values = c("y1" = "black"),
+      labels = c("y1" = "Notowania WIG20")
+    ) + labs(title = paste('Notowania z roku: ', lata[i] + 1)) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = text_size, hjust = 0.5),
+          axis.title = element_text(size = text_size),
+          legend.position = "bottom",
+          legend.text = element_text(size = text_size)) +
+    guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+}
+
+
+put_plots = list(
+  list(),
+  list(),
+  list(),
+  list()
+)
+
+ns = list()
+ks = list()
+ds = list()
+cs = list()
+not = list()
+wo = list()
+pv = list()
+sf = list()
+sh = list()
+
+for (i in 1:4) {
+  ns[[i]] = length(historical_put_hedging_data[[i]][[2]])
+  ks[[i]] = length(wig_historyczne_notowania_list[[i]])
+  
+  ds[[i]] = c(historical_put_hedging_data[[i]][[2]], rep(historical_put_hedging_data[[i]][[2]][ns[[i]]], ks[[i]] - ns[[i]]))
+  cs[[i]] = c(historical_put_hedging_data[[i]][[3]], rep(historical_put_hedging_data[[i]][[3]][ns[[i]]], ks[[i]] - ns[[i]]))
+  not[[i]] = c(wig_historyczne_notowania_list[[i]])
+  wo[[i]] = c(c(historical_put_hedging_data[[i]][[6]]),
+              rep(historical_put_hedging_data[[i]][[3]][n], ks[[i]] - ns[[i]] - 1),
+              max(1800 - wig_historyczne_notowania_list[[i]][ks[[i]]], 0))
+  pv[[i]] = ds[[i]] * not[[i]] + cs[[i]] - wo[[i]]
+  
+  sf[[i]] <- diff(range(ds[[i]])) / diff(range(cs[[i]]))
+  sh[[i]] <- min(ds[[i]]) - min(cs[[i]]) * sf[[i]]
+}
+
+
+for (i in 1:4) {
+  
+  put_plots[[i]][[1]] = local({
+    i = i
+    ggplot() +
+      geom_line(
+        aes(1:ks[[i]], ds[[i]], color = "y1"),
+        linewidth = 0.5
+      ) +
+      geom_line(
+        aes(1:ks[[i]], cs[[i]] * sf[[i]] + sh[[i]], color = "y2"),
+        linewidth = 0.5
+      ) +
+      scale_y_continuous(
+        name = "Delta",
+        sec.axis = sec_axis(
+          ~ (. - sh[[i]]) / sf[[i]],
+          name = "Gotowka"
+        ) 
+      ) + xlab('Czas (lata)') +
+      scale_color_manual(
+        name = "",
+        values = c("y1" = "blue", "y2" = "red"),
+        labels = c("y1" = "Delta", "y2" = "Gotowka")
+      ) + labs(title = 'Wykres skladu portfela wzgledem czasu',
+               subtitle =  bquote('Przyjęta zmienność w portfelu \n zabezpieczającym:' ~ sigma['w'] ~ '=' ~ .(round(historic_one_year_back_sigmas[i], 3)))) +
+      theme_minimal() +
+      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+            plot.subtitle = element_text(size = text_size, hjust = 0.5),
+            axis.title = element_text(size = text_size),
+            legend.position = "bottom",
+            legend.text = element_text(size = text_size)) +
+      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+  
+  
+  put_plots[[i]][[2]] = local({
+    i = i
+    ggplot() + geom_line(
+      aes(1:ks[[i]], pv[[i]], color = "y1"),
+      linewidth = 0.5
+    ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
+      scale_color_manual(
+        name = "",
+        values = c("y1" = "black"),
+        labels = c("y1" = "Roznica miedzy wartoscia portfela replikacyjnego \n a wartoscia opcji")
+      ) + labs(title = 'Zysk/strata \n portfela repilkującego',
+               subtitle = paste('Koncowa roznica \n replikacji = ', round(historical_call_hedging_data[[i]][[1]], 2))) +
+      theme_minimal() +
+      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+            plot.subtitle = element_text(size = text_size, hjust = 0.5),
+            axis.title = element_text(size = text_size),
+            legend.position = "bottom",
+            legend.text = element_text(size = text_size)) +
+      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+  
+  
+  put_plots[[i]][[3]] = local({
+    i = i
+    ggplot() + geom_line(
+      aes(1:ks[[i]], wig_historyczne_notowania_list[[i]], color = "y1"),
+      linewidth = 0.5
+    ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
+      scale_color_manual(
+        name = "",
+        values = c("y1" = "black"),
+        labels = c("y1" = "Notowania WIG20")
+      ) + labs(title = paste('Notowania z roku: ', lata[i] + 1)) +
+      theme_minimal() +
+      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+            plot.subtitle = element_text(size = text_size, hjust = 0.5),
+            axis.title = element_text(size = text_size),
+            legend.position = "bottom",
+            legend.text = element_text(size = text_size)) +
+      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+  })
+}
+```
+
+```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+(call_plots[[1]][[1]] | call_plots[[1]][[2]] | call_plots[[1]][[3]])  / 
+  (call_plots[[2]][[1]] | call_plots[[2]][[2]] | call_plots[[2]][[3]])
+```
+
+```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+(put_plots[[1]][[1]] | put_plots[[1]][[2]] | put_plots[[1]][[3]]) / 
+  (put_plots[[2]][[1]] | put_plots[[2]][[2]] | put_plots[[2]][[3]])
+```
+
+
+
 
 ### Podrozdział ...
 
@@ -2217,12 +2738,144 @@ Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarcz
 
 # Część B - Delta-Gamma-Hedging opcji call na WIG20 z wykorzystaniem opcji binarnych
 
-(Dokładny opis zadania, scenariusz sytuacji, tj. inwestycji, którą zabezpieczamy)
+W tej rozważamy analogiczny scenariusz jak w przypadku części A z dwoma znaczącymi zmianami. Po pierwsze, wprowadzamy koszty transakcyjne w wysokości $0.04\%$ przy obrocie instrumentami finansowymi w dowolną stronę. Po drugie, dopuszczamy replikacje korzystające nie tylko z samego indeksu WIG20, ale również z opcji binarnych na WIG20, mających takie same ceny wykonania jak opcje waniliowe na WIG20 dostępne na GPW. Dopuszczając dodatkowe aktywo umożliwiamy zatem konstrukcję takich strategii zabezpieczających, które nie są wyłącznie delta-netraulne, ale również gamma-neutralne. Głównym celem tego rozdziału jest próba odnalezienia strategii delta-gamma-neutralnej, która w obecności wspomnianych kosztów transakcyjnych będzie zwracała lepsze rezultaty niż omówiony już standardowy delta-hedging. Wszystkie analizy przeprowadzimy dla przypadku, w którym to zabezpieczaną opcją jest waniliowa opcja call o cenie wykonania $1700$.
 
-W tej części będziemy chcieli się zabezpieczyć nie tylko samym aktywem bazowym, to jest indeksem WIG20, ale również z poczatku jedną, a w następnych momentach wieloma opcjami binarnymi. Dodatkowo wprowadzamy w tej części koszty transakcyjne w wysokości 0.4% przy obrocie w dowolną stronę. Będziemy chcieli stosować tzw. delta-gamma hedging, a więc nie będziemy chcieli zerować tylko delty samego portfela, ale i gammę, co jest druga pochodną ceny portfela po cenie aktywa bazowego. 
-## Założenia dotyczące rynku
+## Delta-Hedging w obecności kosztów transakcyjnych
 
-(Opis instrumentów jakie mamy do dyspozycji (inwestycja wolna od ryzyka, opcje zwykłe i binarne, indeks), możliwości częstości re-hedgingu, opłaty transakcyjne)
+Zanim przejdziemy do omówienia strategii delta-gamma-neutralnych przyjrzymy się rozważanej wcześniej strategii delta-hedgingowej w obecności kosztów transakcyjnych - to właśnie ta strategia będzie stanowiła dla nas pewien punkt odniesienia. Poniżej przedstawiamy histogramy różnic między portfelem replikującym (delta-hedgingowym), a payoffem replikowanej opcji (czyli waniliowy call o zapadalności $1$ rok, cena wykoniania $1700$) dla różnych częstotliwości rehedgingu; w każdym przypadku zestawiamy histogram różnic przed i po odjęciu kosztów transakcyjnych.
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+transaction_fee = 0.004
+mu = 0
+sigma = 0.2
+r = 0.05
+t = 1
+M = 10000
+K = 1700
+
+call_rehedging_data = list(
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')
+)
+
+put_rehedging_data = list(
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
+)
+```
+
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+###
+call_plot1 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[1]][[1]]) - as.vector(call_rehedging_data[[1]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("250 re-hedgingów w ciągu roku (codziennie)", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[1]][[1]] - call_rehedging_data[[1]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[1]][[1]] - call_rehedging_data[[1]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[1]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[1]][[1]])), 2)
+                           ))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
+
+
+call_plot2 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[2]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[2]][[1]]) - as.vector(call_rehedging_data[[2]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("125 re-hedgingów w ciągu roku (co dwa dni)", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[2]][[1]] - call_rehedging_data[[2]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[2]][[1]] - call_rehedging_data[[2]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[2]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[2]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
+
+call_plot3 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[3]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[3]][[1]]) - as.vector(call_rehedging_data[[3]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("63 re-hedgingi w ciągu roku (co cztery dni)", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[3]][[1]] - call_rehedging_data[[3]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[3]][[1]] - call_rehedging_data[[3]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[3]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[3]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
+
+call_plot4 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[4]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[4]][[1]]) - as.vector(call_rehedging_data[[4]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-100, 50)) +
+  ggtitle("35 re-hedgingów w ciągu roku (co tydzień)", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[4]][[1]] - call_rehedging_data[[4]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[4]][[1]] - call_rehedging_data[[4]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[4]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[4]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
+
+call_plot5 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[5]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[5]][[1]]) - as.vector(call_rehedging_data[[5]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("12 re-hedgingów w ciągu roku (co miesiąc)", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[5]][[1]] - call_rehedging_data[[5]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[5]][[1]] - call_rehedging_data[[5]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[5]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[5]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
+
+call_plot6 = ggplot() +  
+  geom_histogram(aes(x = as.vector(call_rehedging_data[[6]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = (as.vector(call_rehedging_data[[6]][[1]]) - as.vector(call_rehedging_data[[6]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue", "c2" = "lightblue"),
+    labels = c("c1" = "Bez kosztów transakcyjnych", "c2" = "Z kosztami transakcyjnymi (0.4%)")
+  ) + xlab('') + ylab('') + xlim(c(-200, 100)) +
+  ggtitle("1 re-hedging w ciągu roku", 
+          subtitle = paste('Odchylenie standardowe (z kosztami):', round(sd(call_rehedging_data[[6]][[1]]- call_rehedging_data[[6]][[5]]), 2), '\nŚrednia (z kosztami): ', round(mean(as.vector(call_rehedging_data[[6]][[1]] - call_rehedging_data[[6]][[5]])), 2),
+                           '\nOdchylenie standardowe (bez kosztów):', round(sd(call_rehedging_data[[6]][[1]]), 2), '\nŚrednia (bez kosztów): ', round(mean(as.vector(call_rehedging_data[[6]][[1]])), 2)))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "bottom",
+        legend.text = element_text(size = 6))
+
+
+(call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6) +
+  plot_annotation(
+    title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = "Opcja CALL, cena wykonania 1700, czas do zapadnięcia 1 rok",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+Jak widzimy, ...
+
+## Strategie zabezpieczające 
+
+Po omówieniu startegii delta-hedginowej w obecności kosztów transakcyjnych jesteśmy gotowi na przedstawienie strategii delta-gamma-neutralnych. Rozpoczniemy od tzw. naiwnego delta-gamma-hedginu, a następnie przejdziemy do strategii bardziej skomplikowanych.
+
+### Strategia 1: Naiwny Delta-Gamma-Hedging
 
 Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
 
@@ -2261,6 +2914,8 @@ $$
   \Delta_{BinaryCall} = -\Delta_{BinaryPut} = \frac{N'(d_2)}{\sigma S \sqrt{T-t}}
 $$
 gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
+
+#### Analiza strategii 1.
 
 ```{r greeks_and_hedge_functions, echo=FALSE, cache=TRUE}
 
@@ -2429,15 +3084,12 @@ plot_PnL_hist(hedge, slupki)
 part_B(T, S0, K, r, koszty, slupki)
 ```
 
-## Strategie zabezpieczające 
 
-### Strategia 1: Band hedging
+### Strategia 2: Band Delta-Gamma-Hedging
 
 Ustalone bandwith dla gamma = 1. potem będzie analiza też dla zmiennego band dla gamma
 
-Idea: rehedging gdy gamma lub delta wyjdzie poza bandwith. 
-
-Dopisać ile rehedgingów, bo na razie te wykresy nic nie mówią właściwie, wszystkie są beznadziejne (?)
+#### Analiza strategii 2.
 
 ```{r band_gamma, echo=FALSE, cache=TRUE}
 
@@ -2452,8 +3104,6 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
   
   for (i in 1:n) {
     S <- S_paths[i, ]
-    
-    # początkowe wartości
     V <- call_price(S[1], K, r, sigma, T)
     
     phi_prev <- 0
@@ -2462,7 +3112,6 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
     for (t in 1:(m - 1)) {
       tau <- max(T - (t - 1) * dt, dt)
       
-      # ceny opcji
       C2_t <- binary_call_price(S[t], K, r, sigma, tau)
       
       if (t == (m - 1)) {
@@ -2473,7 +3122,6 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
         C2_next <- binary_call_price(S[t + 1], K, r, sigma, tau - dt)
       }
       
-      # greki
       delta1 <- call_delta(S[t], K, r, sigma, tau)
       gamma1 <- call_gamma(S[t], K, r, sigma, tau)
       
@@ -2484,7 +3132,6 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
         gamma2 <- 1e-8
       }
       
-      # nowe pozycje
       w_target <- -gamma1 / gamma2
       w_target <- w_target / (1 + abs(w_target) / 50)
       
@@ -2502,23 +3149,19 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
         phi <- phi_prev
       }
       
-      # koszty transakcyjne
       cost <- cost_rate * (
         abs(phi - phi_prev) * S[t] +
         abs(w - w_prev) * C2_t
       )
       
-      # update portfela
       V <- V +
         phi * (S[t + 1] - S[t]) +
         w * (C2_next - C2_t) +
         r * V * dt -
         cost
       
-      # zapis P&L względem opcji
       PnL[i, t + 1] <- V - C1_next
       
-      # aktualizacja pozycji
       phi_prev <- phi
       w_prev <- w
     }
@@ -2642,15 +3285,579 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```
 
-#### Analiza strategii 1.
 
-### Strategia 2.
+### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
-#### Analiza strategii 2.
+W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Portfela replikujy wygląda następująco:
+$$
+\Pi = -V + \alpha S + \beta (B_C^{K_C} + B_P^{K_P}) + B
+$$
+gdzie $B_C^{K_C}$ opcją binarną call o cenie wykonania $K_C$, a $B_P^{K_P}$ opcją binarną put o cenie wykonania $K_P$ (obie opcje binarne mają tą samą zapadalność jak replikowana opcja $V$). Podobnie jak w przypadku poprzednich strategii, chcemy, aby zarówno delta jak i gamma wynosiły $0$, co daje nam, ze parametry $\alpha$ i $\beta$ wynoszą:
 
-### ...
+$$
+\alpha = \frac{\partial V}{\partial S} - (\frac{\partial B_C^{K_C}}{\partial S} + \frac{\partial B_P^{K_P}}{\partial S})\dfrac{\frac{\partial^2 V}{\partial S^2}}{\frac{\partial^2 B_C^{K_C}}{\partial S^2} + \frac{\partial^2 B_P^{K_P}}{\partial S^2}} = \Delta_V - (\Delta_{B_C} + \Delta_{B_P})\frac{\Gamma_V}{\Gamma_{B_C} + \Gamma_{B_P}}
+$$
+$$
+\beta = \dfrac{\frac{\partial^2 V}{\partial S^2}}{\frac{\partial^2 B_C^{K_C}}{\partial S^2} + \frac{\partial^2 B_P^{K_P}}{\partial S^2}} = \frac{\Gamma_V}{\Gamma_{B_C} + \Gamma_{B_P}}.
+$$
+Ceny wykonania opcji binarnych dobieramy w następujący sposób: załóżmy, że znajdujemy się w chwili $t$. Patrzymy na obecną cenę indeksu $S_t$ i dla binarnego calla jako cenę wykonania bierzemy $S_t + K^*$ (zaokrągloną do wielokrotności liczby $50$, ponieważ ceny wykonania opcji dostępnych na GPW zmieniają się właśnie o tę wartość), a dla binarnego puta jako cenę wykonania bierzemy $S_t - K^*$ (ponownie, zaokrągloną do wielokrotności liczby $50$), gdzie $K^*$ jest pewną z góry ustaloną liczbą. W celu ograniczenia kosztów, wprowadzamy procedurę determinującą wprowadzanie zmian w portfelu - sprawdzamy w każdej chwili, czy nowa wartość $\alpha'$ (tj. policzona dla obecnie znanej ceny $S_t$ i $t$) różni się od już posiadanej $\alpha$. Jeśli $|\alpha' - \alpha| > \epsilon$, gdzie $\epsilon$ jest pewną z góry ustaloną liczbą, to aktualizujemy portfel - zmieniamy zarówno wartość $\alpha$ na nową, tj. dokupujemy/sprzedajemy więcej indeksu, jak i dokonujemy zmian w posiadanych opcjach binarnych: sprzedajemy stare opcje binarne, których mieliśmy $\beta$ i kupujemy nowe opcje binarne w ilości $\beta'$ o cenach wykonania ustalonych według przepisu opisanego wyżej. Oczywiście, ze względu na konstrukcję cen wykonania opcji binarnych, stare opcje binarne, które sprzedajemy mają inną cenę wykonania niż te, które w danej chwili dokupujemy.
 
-## Porównanie strategii ze zwykłym delta-hedgingiem
+W celu zagwarantowania stabilności i praktyczności tej strategii musimy przyjąc dodatkowe ograniczenia. Ze względu na postać wzoru determinującego liczbę opcji binarnych, czyli $\beta$, w niektórych przypadkach będziemy mieli do czynienia z sytuacją, gdy będzie ona postaci $\frac{0}{0}$ - przyjmujemy wtedy, że $\beta = 0$. Podobna sytuacja ma miejsce w przypadku, gdy licznik $\beta$ jest niezerowy, ale wciąż mianownik jest bliski zeru (lub zeru równy) - przyjemy wtedy, że $\beta$ jest równa $10 000$ (zauważmy, że nie jest to jedynie problem natury numerycznej - gdybyśmy przyjęli, że w takiej sytuacji $\beta$ powinna wynosić znacznie więcej, powiedzmy $10^{32}$, co może byłoby bliższe faktycznym numerycznym wartościom, to wówczas mielibyśmy problem natury praktycznej tej strategii replikacyjnej, bowiem $\beta$ jest liczbą opcji binarnych, a żaden uczestnik rynku finansowego nie byłby w stanie sprzedać nam takiej ilości tych opcji).
+
+Jak zatem widzimy, startegia ta jest charakteryzowana przez dwie liczby $\epsilon$ oraz $K^*$ - pierwsza z nich ma wpływ na częstość rehedgingu i w znaczny stopniu może umożliwić nam zredukowanie kosztów transakcyjnych (przyjmując wysoki $\epsilon$ bardzo rzadko będziemy dokonywać zmian w portfelu, więc i koszta będą niskie), a druga odpowiada za część portfela związaną z opcjami binarnymi i okaże się kluczowy w wypadkach błędnego oszacowania zmienności rynku, co omówimy później. Kluczem więc jest dobranie takich wartości tych liczb, aby rezultaty replikacji były zadowalające.
+
+#### Wyznaczenie optymalnych parametrów strategii 3. 
+
+\leavevmode\par
+
+W celu wyznaczenia optymalnej pary wartości parametrów $\epsilon$ i $K^*$ przeprowadzimy eksperyment symulacyjny typu Monte Carlo - dla pewnych wybranych wartości owych parametrów sprawdzimy, jak dobrze rozważany portfel replikuje opcję call o cenie wykonania $1700$ na sztucznie wygenerowanych notowaniach indeksu WIG20. Ze względu na liczbę rozważanych par obu parametrów, niemożliwym byłoby przeprowadzenie analizy w oparciu o histogramy, jak to robiliśmy badając standardowy delta-hedging, więc ograniczamy się do zbadania odchyleń standardowych oraz średnich różnic między portfelem, a payoffem replikowanej opcji. Poniżej przedstawiamy uzyskane wyniki w postaci dwóch wykresów.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Funkcja przeprowadzajaca gamma-hedging
+
+# epsilon - kontroluje pasmo (band), transaction_fee - koszt (procent) transakcyjny,
+# S0 - poczatkowa wartosc aktywa bazowego, mu - dryf, pricing_sigma - zmiennosc uzyta do wyceny w portfelu replikacyjnym
+# market_sigma - zmiennosc wedlug ktorej generujemy trajektorie aktywa bazowego,
+# r - stopa procentowa bez ryzyka, t - czas do zapadniecia opcji,
+# n - liczba (dat) notowan opcji, m - liczba powtorzen algorytmu
+# K - cena wykonania replikowanej opcji, option_premium - cena replikowanej opcji (jesli NA,
+# to bierzemy ze wzoru BS), real_prices - notowania aktywa bazowego (jesli NA,
+# to generujemy wedlug funkcji gbm_simulation), strike_premium - K*, czyli parametr
+# ktory determinuje cene wykonania opcji binarnych ktorymi zabezpieczamy
+# beta_upper_limit - maksymalna wartosc bety (ilosci opcji binarnych)
+
+BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, 
+                                               pricing_sigma, market_sigma, r, t, 
+                                               n, m, K, option_premium = NA, real_prices = NA, 
+                                               option_type = 'C', strike_premium = 50, beta_upper_limit = 10e+8) {
+  
+  gbm_simulation <- function(S0, mu, sigma, t, n, M) {
+    dt <- t / n
+    
+    brownian_increments <- matrix(rnorm(M * n, mean = 0, sd = sqrt(dt)), nrow = M, ncol = n)
+    brownian_increments_transformed <- (mu - sigma^2 / 2) * matrix(rep(1:n, M)*dt, nrow = M, byrow = TRUE) + sigma * t(apply(brownian_increments, 1, cumsum))
+    brownian_increments_transformed <- cbind(rep(1, M), exp(brownian_increments_transformed))
+    
+    simulated_price_paths <- S0 * t(brownian_increments_transformed)
+    
+    return(simulated_price_paths)
+  }
+  
+  BS_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(S*pnorm(d1) - K*exp(-r*(t_total - t))*pnorm(d2))}
+    else {return(-S*pnorm(-d1) + K*exp(-r*(t_total - t))*pnorm(-d2))}
+  }
+  
+  BS_delta = function(S, K, r, sigma, t_total, t, option_type) {
+    if (option_type == 'C') {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))))}
+    else {return(pnorm((log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))) - 1)}
+  }
+  
+  BS_gamma = function(S, K, r, sigma, t_total, t) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    return(dnorm(d1)/(sigma * S * sqrt(t_total - t)))
+  }
+  
+  BS_binary_price = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(exp(-r * (t_total - t))*pnorm(d2))}
+    else {return(exp(-r * (t_total - t))*(1 - pnorm(d2)))}
+  }
+  
+  BS_binary_delta = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return(exp(-r*(t_total - t)) * dnorm(d2) / (sigma * S * (t_total - t)^(1/2)))}
+    else {return(-exp(-r * (t_total - t)) * dnorm(d2) / (sigma * S * (t_total - t)^(1/2)))}
+  }
+  
+  BS_binary_gamma = function(S, K, r, sigma, t_total, t, option_type) {
+    d1 = (log(S/K) + (r + sigma^2 / 2)*(t_total - t))/(sigma * (t_total - t)^(1/2))
+    d2 = d1 - sigma * (t_total - t)^(1/2)
+    
+    if (option_type == 'C') {return( - exp(-r*(t_total - t)) * d1 * dnorm(d2) / (sigma^2 * S^2 * (t_total - t)))}
+    else {return(exp(-r*(t_total - t)) * d1 * dnorm(d2) / (sigma^2 * S^2 * (t_total - t)))}
+  }
+  
+  if ((n < 2) | (prod(is.na(real_prices)) & (n > t*250)) | ((!prod(is.na(real_prices))) & (n > t*length(real_prices)))) {
+    message('n (częstość aktualizowania portfela) za niska lub za wysoka')
+    stop()
+  }
+  
+  alphas_matrix = matrix(nrow = n, ncol = m)
+  betas_matrix = matrix(nrow = n, ncol = m)
+  cashs_matrix = matrix(nrow = n, ncol = m)
+  option_values_matrix = matrix(nrow = n, ncol = m)
+  binaries_values_matrix = matrix(nrow = n + 1, ncol = m)
+  final_price_diffs = numeric(m)
+  transactions = numeric(m)
+  transaction_costs = numeric(m)
+  
+  for (j in 1:m) {
+    
+    if (!!prod(is.na(real_prices))) {price_path = c(gbm_simulation(S0, mu, market_sigma, t, 250, 1))}
+    else {price_path = real_prices[, j]}
+
+    tstep = 0
+    dt = t/n
+    
+    if (is.na(option_premium)) {
+      cashs_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+      option_values_matrix[1, j] = BS_price(price_path[1], K, r, pricing_sigma, t, tstep, option_type)
+    }
+    else {
+      cashs_matrix[1, j] = option_premium
+      option_values_matrix[1, j] = option_premium
+    }
+    
+    delta_B = BS_binary_delta(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+    beta = min(beta_upper_limit, BS_gamma(price_path[1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
+    
+    betas_matrix[1, j] = beta
+    alphas_matrix[1, j] = BS_delta(price_path[1], K, r, pricing_sigma, t, tstep, option_type) - delta_B * beta
+    cashs_matrix[1, j] = cashs_matrix[1, j] - alphas_matrix[1, j] * price_path[1] - beta * (BS_binary_price(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P'))
+    
+    latest_binary_call_strike = price_path[1] + strike_premium
+    latest_binary_put_strike = price_path[1] - strike_premium
+    
+    transactions[j] = transactions[j] + 1
+    binaries_values_matrix[1, j] = BS_binary_price(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+    transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(alphas_matrix[1, j]) * price_path[1] + transaction_fee * abs(betas_matrix[1, j]) * (binaries_values_matrix[1, j])
+    
+    for (i in 1:(n - 1)) {
+      
+      tstep = tstep + dt
+      
+      option_values_matrix[i + 1, j] = BS_price(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
+
+      
+      new_delta_B = BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+      #new_beta = min(beta_upper_limit, BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
+      
+      new_beta = ifelse(is.nan(BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P'))),
+                        0,
+                        min(beta_upper_limit, BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
+      )
+      
+      new_alpha = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type) - new_delta_B * new_beta
+      
+      if (abs(new_alpha - alphas_matrix[i, j]) < epsilon) {
+        alphas_matrix[i + 1, j] = alphas_matrix[i, j]
+        betas_matrix[i + 1, j] = betas_matrix[i, j]
+        cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt)
+        binaries_values_matrix[i + 1, j] = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_call_strike, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_put_strike, r, pricing_sigma, t, tstep, 'P')
+        next
+      }
+      
+      alphas_matrix[i + 1, j] = new_alpha
+      betas_matrix[i + 1, j] = new_beta
+      
+      new_binaries_price = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+      old_binaries_price = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_call_strike, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_put_strike, r, pricing_sigma, t, tstep, 'P')
+      cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (alphas_matrix[i + 1, j] - alphas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1] + betas_matrix[i, j] * old_binaries_price - betas_matrix[i + 1, j] * new_binaries_price
+      
+      latest_binary_call_strike = price_path[floor(length(price_path)*tstep) + 1] + strike_premium
+      latest_binary_put_strike = price_path[floor(length(price_path)*tstep) + 1] - strike_premium
+      
+      binaries_values_matrix[i + 1, j] = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_call_strike, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_put_strike, r, pricing_sigma, t, tstep, 'P')
+      transactions[j] = transactions[j] + 1
+      transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(alphas_matrix[i, j] - alphas_matrix[i + 1, j]) * price_path[floor(length(price_path)*tstep) + 1] + transaction_fee * abs(betas_matrix[i, j]) * old_binaries_price + transaction_fee * abs(betas_matrix[i + 1, j])* new_binaries_price
+    }
+    
+
+    if (option_type == 'C') {payoff = max(price_path[length(price_path)] - K, 0)}
+    else {payoff = max(K - price_path[length(price_path)], 0)}
+    
+    binary_call_payoff = ifelse(price_path[length(price_path)] > latest_binary_call_strike, 1, 0)
+    binary_put_payoff = ifelse(price_path[length(price_path)] < latest_binary_put_strike, 1, 0)
+    
+    portfolio = cashs_matrix[n, j] * exp(r*(t - tstep)) + alphas_matrix[n, j] * price_path[length(price_path)] + betas_matrix[n, j] * (binary_call_payoff + binary_put_payoff)
+    
+    binaries_values_matrix[n + 1, j] = binary_call_payoff + binary_put_payoff
+    
+    final_price_diffs[j] = portfolio - payoff
+  }
+  
+  return(list(final_price_diffs, alphas_matrix, cashs_matrix, transactions, transaction_costs, option_values_matrix, betas_matrix, binaries_values_matrix)) 
+}
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+# Epsilony jakie rozwazamy (dla innych, tj. wiekszych od 0.11 slabe rezultaty)
+epsilon_range = c(0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08)
+# K* jakie rozwazamy (dla wiekszych problem, bo zdaza sie ze cena spada ponizej 700, i mamy negatywny strike dla binarnych putow, poza tym
+# wystarczajaco dobre wyniki zachodza juz dla nizszych)
+strike_premium_range = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700)
+
+# Parametry
+transaction_fee = 0.004
+S0 = 2270
+mu = 0.1
+pricing_sigma = 0.2
+market_sigma = 0.2
+r = 0.05
+t = 1
+n = 250
+M = 250
+K = 1700
+beta_limit = 10^4
+
+set.seed(1)
+
+# Lista z rezultatami gamma hedgingu dla kombinacji epsilonow i K*
+gamma_hedging_data_list = list()
+# Macierze ze statystykami opisujacymi wyniki dla kombinacji epsilonow i K*
+gamma_hedging_means_matrix = matrix(nrow = length(epsilon_range), ncol = length(strike_premium_range))
+gamma_hedging_sds_matrix = matrix(nrow = length(epsilon_range), ncol = length(strike_premium_range))
+gamma_hedging_mean_betas_matrix = matrix(nrow = length(epsilon_range), ncol = length(strike_premium_range))
+
+rownames(gamma_hedging_means_matrix) = epsilon_range
+colnames(gamma_hedging_means_matrix) = strike_premium_range
+rownames(gamma_hedging_sds_matrix) = epsilon_range
+colnames(gamma_hedging_sds_matrix) = strike_premium_range
+rownames(gamma_hedging_mean_betas_matrix) = epsilon_range
+colnames(gamma_hedging_mean_betas_matrix) = strike_premium_range
+
+for (i in 1:length(epsilon_range)) {
+  gamma_hedging_data_list[[i]] = list()
+}
+
+# Ta zmienna sluzy do tego, ze czasami (przy bardzo rzadkich trajektoriach) w gamma-hedgingu, przez zabezpieczanie opcjami binarnymi
+# mozemy uzyskac duzy profit, ktory zaburza statystyki (sztucznie podnosi srednia roznice miedzy portfelem a payoffem opcji), wiec
+# przyjmujac np. positive_limit = 100 mozemy wyeliminowac takie obserwacje (dla positive_limit = Inf rozwazamy wszystkie obserwacje)
+positive_limit = Inf
+
+# Wyznaczanie danych (to sie chwilke kompiluje, u mnie dla M = 100 tak z 5 minut)
+for (i in 1:length(epsilon_range)) {
+  for (j in 1:length(strike_premium_range)) {
+    gamma_hedging_data_list[[i]][[j]] = BS_gamma_hedging_algorithm(epsilon_range[i], transaction_fee, S0,
+                                                                   mu, pricing_sigma, market_sigma, r, t,
+                                                                   n, M, K, strike_premium = strike_premium_range[j],
+                                                                   beta_upper_limit = beta_limit)
+    
+    gamma_hedging_means_matrix[i, j] = mean((gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]])[gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
+    gamma_hedging_sds_matrix[i, j] = sd((gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]])[gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
+    gamma_hedging_mean_betas_matrix[i, j] = mean(gamma_hedging_data_list[[i]][[j]][[7]][, gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
+  }
+}
+
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=9, cache=TRUE}
+###
+df_sds = melt(t(gamma_hedging_sds_matrix))
+df_sds$Var1 = factor(df_sds$Var1)
+df_sds$Var2 = factor(df_sds$Var2)
+
+# Mapa ciepla odchylen standardowych roznic miedzy wartoscia portfela a payoffem opcji
+sds_plot = ggplot(df_sds, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = round(value, 1)), size = 3) +
+  coord_fixed() + ylab(bquote(epsilon)) + xlab('K*') + 
+  labs(title = "Odchylenie standardowe roznicy miedzy portfelem zabezpieczajacym \na payoffem opcji zabezpieczanej (call, K = 1700), \nGamma-Hedging z danym epsilonem (kontrolujacym band) \ni parametrem K* modyfikujacym strike'i opcji binarnych",
+       subtitle = bquote("Parametry rynku: " ~ sigma ~ '= 0.2' ~ mu ~ '= 0.1' ~ 'r = 0.05')) +
+  scale_fill_gradientn(
+    colors = c("green", "yellow", "orange", "red"),
+    values = scales::rescale(c(0, 10, 50, 300))
+  ) + scale_y_discrete(limits = rev(levels(df_sds$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
+  theme(legend.position = 'none', plot.title = element_text(size = 12), plot.subtitle = element_text(size = 10))
+  
+
+df_means = melt(t(gamma_hedging_means_matrix))
+df_means$Var1 = factor(df_means$Var1)
+df_means$Var2 = factor(df_means$Var2)
+
+# Mapa ciepla srednich roznic miedzy wartoscia portfela a payoffem opcji
+means_plot = ggplot(df_means, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = round(value, 1)), size = 3) +
+  coord_fixed() + ylab(bquote(epsilon)) + xlab('K*') + 
+  labs(title = "Srednia roznica miedzy portfelem zabezpieczajacym \na payoffem opcji zabezpieczanej (call, K = 1700), \nGamma-Hedging z danym epsilonem (kontrolujacym band) \ni parametrem K* modyfikujacym strike'i opcji binarnych",
+       subtitle = bquote("Parametry rynku: " ~ sigma ~ '= 0.2' ~ mu ~ '= 0.1' ~ 'r = 0.05')) +
+  scale_fill_gradientn(
+    colors = c("red", "orange", "yellow", "green"),
+    values = scales::rescale(c(-500, -75, -30, -10))
+  ) + scale_y_discrete(limits = rev(levels(df_means$Var2))) + theme_minimal() + coord_fixed(ratio = 0.75) +
+  theme(legend.position = 'none', plot.title = element_text(size = 12), plot.subtitle = element_text(size = 10))
+
+# Wyswietlenie wykresow
+
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=6, fig.width=7, fig.align='center', cache=TRUE}
+####
+means_plot
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=6, fig.width=7, fig.align='center', cache=TRUE}
+####
+sds_plot
+```
+
+Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają jak najwyższą średnią oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy dojść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.05, 0.055\}$ oraz $K^* \in \{400, 450, 500\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedginu - jak się później przekonamy (podczas analizy czułości na zmienność rynkową oraz porównaniu obu strategii na notowaniach historycznych), tak jednak nie jest.
+
+#### Analiza strategii 3.  
+
+\leavevmode\par
+
+W poprzednim podrozdziale wyznaczyliśmy zbiór parametrów $\epsilon$ i $K^*$, dla których startegia zwracała najlepsze wyniki pod względem średniej oraz odchylenia standardowego. W tym podrozdziale przeanalizujemy dokładniej stategię korzystając z wartości parametrów $(\epsilon, K^*) = (0.05, 450)$. Następnie porównamy ją ze standardową strategią delta-hedgingową, zarówno na notowaniach symulacyjnych jak i historycznych. Rozpoczniemy od analizy histogramu różnic między portfelem replikacyjnym, a payoffem replikowanej opcji.
+
+```{r, echo = FALSE, cache=TRUE, fig.height=3, fig.width=6, fig.align='centre', cache=TRUE}
+plotbsgh_hist = ggplot() +  
+  geom_histogram(aes(x = as.vector(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  scale_fill_manual(
+    name = "",
+    values = c("c1" = "darkblue"),
+    labels = c("c1" = "")
+  ) + xlab('') + ylab('') + xlim(c(-50, 25)) +
+  ggtitle("", 
+          subtitle = paste('Odchylenie standardowe:', round(sd(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]]), 2), '\nŚrednia: ', round(mean(as.vector(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]])), 2)
+                           ))  + theme_minimal() +
+  theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
+
+plotbsgh_hist + plot_annotation(
+    title = "Histogram różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
+    subtitle = bquote("Opcja CALL, cena wykonania 1700, czas do zapadnięcia 1 rok, Strategia 3, Parametry: " ~ epsilon ~ '= 0.05, K* = 450'),
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+    )
+  )
+```
+
+(komentarz do histogramu)
+
+Przy opisie strategii wspomnieliśmy, że rolą parametru $\epsilon$ jest ograniczenie liczby transakcji - w obecności niezerowych kosztów transakcyjnych jest to oczywiście coś pożądanego w strategii replikującej, o ile nie wpływa zbyt negatywnie na jej skuteczność. W przypadku rozważanej przez nas wartości parametru $\epsilon$ dostrzegamy istotną redukcję liczby transakcji, bowiem średnio aktualizujemy portfel `r round(mean(gamma_hedging_data_list[[11]][[9]][[4]]))` razy, a ponieważ przy każdej aktualizacji portfela dokonujemy zmian w liczbie posiadanego indeksu WIG20 i liczbie posiadanych opcji binarnych, średnio wykonujemy `r 2*round(mean(gamma_hedging_data_list[[11]][[9]][[4]]))` transakcji.
+
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+set.seed(2)
+
+dh_data_ds = list(
+  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.15,
+                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
+  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.2,
+                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
+  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.25,
+                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
+  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.3,
+                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0)
+)
+
+
+dh_means_ds = c(
+  mean(dh_data_ds[[1]][[1]] - dh_data_ds[[1]][[5]]),
+  mean(dh_data_ds[[2]][[1]] - dh_data_ds[[2]][[5]]),
+  mean(dh_data_ds[[3]][[1]] - dh_data_ds[[3]][[5]]),
+  mean(dh_data_ds[[4]][[1]] - dh_data_ds[[4]][[5]])
+)
+
+dh_sds_ds = c(
+  sd(dh_data_ds[[1]][[1]] - dh_data_ds[[1]][[5]]),
+  sd(dh_data_ds[[2]][[1]] - dh_data_ds[[2]][[5]]),
+  sd(dh_data_ds[[3]][[1]] - dh_data_ds[[3]][[5]]),
+  sd(dh_data_ds[[4]][[1]] - dh_data_ds[[4]][[5]])
+)
+
+eps = 0.05
+binary_K = 450
+
+bsgh_data_ds = list(
+  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
+                             mu, pricing_sigma, 0.15, r, t,
+                             n, 100, K, strike_premium = binary_K,
+                             beta_upper_limit = beta_limit),
+  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
+                             mu, pricing_sigma, 0.2, r, t,
+                             n, 100, K, strike_premium = binary_K,
+                             beta_upper_limit = beta_limit),
+  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
+                             mu, pricing_sigma, 0.25, r, t,
+                             n, 100, K, strike_premium = binary_K,
+                             beta_upper_limit = beta_limit),
+  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
+                             mu, pricing_sigma, 0.3, r, t,
+                             n, 100, K, strike_premium = binary_K,
+                             beta_upper_limit = beta_limit)
+)
+
+
+bsgh_means_ds = c(
+  mean(bsgh_data_ds[[1]][[1]] - bsgh_data_ds[[1]][[5]]),
+  mean(bsgh_data_ds[[2]][[1]] - bsgh_data_ds[[2]][[5]]),
+  mean(bsgh_data_ds[[3]][[1]] - bsgh_data_ds[[3]][[5]]),
+  mean(bsgh_data_ds[[4]][[1]] - bsgh_data_ds[[4]][[5]])
+)
+
+bsgh_sds_ds = c(
+  sd(bsgh_data_ds[[1]][[1]] - bsgh_data_ds[[1]][[5]]),
+  sd(bsgh_data_ds[[2]][[1]] - bsgh_data_ds[[2]][[5]]),
+  sd(bsgh_data_ds[[3]][[1]] - bsgh_data_ds[[3]][[5]]),
+  sd(bsgh_data_ds[[4]][[1]] - bsgh_data_ds[[4]][[5]])
+)
+
+bsgh_dh_data_table_means = as.data.frame(matrix(c(
+  round(dh_means_ds, 2),
+  round(bsgh_means_ds, 2)
+), nrow = 2, byrow = TRUE))
+
+bsgh_dh_data_table_sds = as.data.frame(matrix(c(
+  round(dh_sds_ds, 2),
+  round(bsgh_sds_ds, 2)
+), nrow = 2, byrow = TRUE))
+
+rownames(bsgh_dh_data_table_means) = c('DH', 'BSDGH')
+colnames(bsgh_dh_data_table_means) = c(
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.15$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.2$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.25$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.3$'
+)
+
+rownames(bsgh_dh_data_table_sds) = c('DH', 'BSDGH')
+colnames(bsgh_dh_data_table_sds) = c(
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.15$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.2$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.25$',
+                                 '$\\sigma_w = 0.2, \\sigma_r = 0.3$'
+)
+
+kable(bsgh_dh_data_table_sds)
+kable(bsgh_dh_data_table_means)
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE}
+wig20_2022_notowania = wig20_data %>% filter(year(Data) == 2022) %>% pull(Otwarcie)
+
+pricing_sigmas = seq(from = 0.1, to = 0.3, by = 0.001)
+
+pv_gh_matrix = matrix(nrow = 251, ncol = length(pricing_sigmas))
+pv_dh_matrix = matrix(nrow = 251, ncol = length(pricing_sigmas))
+
+n = 250
+k = 251
+beta_limit = 10^4
+strike_p = 450
+eps = 0.05
+wig20_2022_notowania = matrix(wig20_2022_notowania, nrow = 251)
+
+for (i in 1:length(pricing_sigmas)) {
+  
+  gh_data = BS_gamma_hedging_algorithm(eps, 0.004, NA, NA, pricing_sigmas[i], NA, 0.05, 1, 250, 1, 1800, real_prices = wig20_2022_notowania, strike_premium = strike_p, beta_upper_limit = beta_limit)
+  dh_data = BS_gamma_hedging_algorithm(0, 0.004, NA, NA, pricing_sigmas[i], NA, 0.05, 1, 250, 1, 1800, real_prices = wig20_2022_notowania, strike_premium = 400, beta_upper_limit = 0)
+
+  alphas = c(gh_data[[2]], rep(gh_data[[2]][n], k - n))
+  cashs = c(gh_data[[3]], rep(gh_data[[3]][n], k - n))
+  wo = c(c(gh_data[[6]]),
+         max(wig20_2022_notowania[k] - 1800, 0))
+  betas = c(gh_data[[7]], rep(gh_data[[7]][n], k - n))
+  binaries_values = gh_data[[8]]
+  
+  pv_gh_matrix[, i] = alphas * wig20_2022_notowania + cashs + betas * binaries_values - wo
+  
+  deltas = c(dh_data[[2]], rep(dh_data[[2]][n], k - n))
+  cashs_dh = c(dh_data[[3]], rep(dh_data[[3]][n], k - n))
+  wo = c(c(dh_data[[6]]),
+         max(wig20_2022_notowania[k] - 1800, 0))
+  pv_dh_matrix[, i] = deltas * wig20_2022_notowania + cashs_dh - wo
+}
+
+df1 <- as.data.frame(pv_gh_matrix)
+df1$x <- seq(from = 0, to = 1, length = 251)
+
+df1_long <- pivot_longer(df1, cols = -x,
+                        names_to = "linia",
+                        values_to = "wartosc")
+
+df2 <- as.data.frame(pv_dh_matrix)
+df2$x <- seq(from = 0, to = 1, length = 251)
+
+df2_long <- pivot_longer(df2, cols = -x,
+                         names_to = "linia",
+                         values_to = "wartosc")
+
+p1 = ggplot(df1_long, aes(x = x, y = wartosc, group = linia)) + ylim(min(pv_dh_matrix, pv_gh_matrix), max(pv_dh_matrix, pv_gh_matrix)) +
+  xlab('Czas') + ylab('Różnica między portfelem \nreplikacyjnym a payoffem opcji') +
+  ggtitle("", 
+          subtitle = paste('Strategia BSGDH', '\nOdchylenie standardowe:', round(sd(pv_gh_matrix[251, ]), 2), '\nŚrednia: ', round(mean(pv_gh_matrix[251, ]), 2)
+          )) +
+  geom_line(color = "black", alpha = 0.3) + theme(legend.position = 'none') + theme_minimal()
+
+p2 = ggplot(df2_long, aes(x = x, y = wartosc, group = linia)) + ylim(min(pv_dh_matrix, pv_gh_matrix), max(pv_dh_matrix, pv_gh_matrix)) +
+  xlab('Czas') + ylab('') +
+  ggtitle("", 
+          subtitle = paste('Strategia DH', '\nOdchylenie standardowe:', round(sd(pv_dh_matrix[251, ]), 2), '\nŚrednia: ', round(mean(pv_dh_matrix[251, ]), 2)
+          )) +
+  geom_line(color = "black", alpha = 0.3) + theme(legend.position = 'none') + theme_minimal()
+
+(p1 | p2) + plot_annotation(
+  title = "Porównanie różnic replikacji między standardową strategią delta-hedgingową \n a strategią BS delta-gamma-hedgingową dla różnych \nzmienności przyjętych w procesie replikacji",
+  subtitle = bquote("Opcja CALL, cena wykonania 1700, czas do zapadnięcia 1 rok, notowania historyczne z roku 2022"),
+  theme = theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5)
+  )
+)
+```
+
+```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE}
+wig20_2022_gamma_hedging_data = BS_gamma_hedging_algorithm(eps, 0.004, NA, NA, 0.2, NA, 0.05, 1, 250, 1, 1700, real_prices = wig20_2022_notowania, strike_premium = strike_p, beta_upper_limit = 10^4)
+n = length(wig20_2022_gamma_hedging_data[[2]])
+k = length(wig20_2022_notowania)
+alphas = c(wig20_2022_gamma_hedging_data[[2]], rep(wig20_2022_gamma_hedging_data[[2]][n], k - n))
+cashs = c(wig20_2022_gamma_hedging_data[[3]], rep(wig20_2022_gamma_hedging_data[[3]][n], k - n))
+wo = c(c(wig20_2022_gamma_hedging_data[[6]]),
+       max(wig20_2022_notowania[k] - 1800, 0))
+betas = c(wig20_2022_gamma_hedging_data[[7]], rep(wig20_2022_gamma_hedging_data[[7]][n], k - n))
+binaries_values = wig20_2022_gamma_hedging_data[[8]]
+pv = alphas * wig20_2022_notowania + cashs + betas * binaries_values - wo
+
+shift_factor = diff(range(alphas)) / diff(range(c(cashs, betas)))
+shift_h = min(alphas) - min(c(cashs, betas)) * shift_factor
+text_size = 10
+
+ggplot() +
+  geom_line(
+    aes(1:k, alphas, color = "y1"),
+    linewidth = 0.5
+  ) +
+  geom_line(
+    aes(1:k, cashs * shift_factor + shift_h, color = "y2"),
+    linewidth = 0.5
+  ) +
+  geom_line(
+    aes(1:k, betas * shift_factor + shift_h, color = "y3"),
+    linewidth = 0.5
+  ) +
+  scale_y_continuous(
+    name = "Alpha",
+    sec.axis = sec_axis(
+      ~ (. - shift_h) / shift_factor,
+      name = "Gotowka, Bety"
+    ) 
+  ) + xlab('Czas (lata)') +
+  scale_color_manual(
+    name = "",
+    values = c("y1" = "blue", "y2" = "red", 'y3' = 'green'),
+    labels = c("y1" = "Alpha", "y2" = "Gotowka", 'y3' = 'Beta')
+  ) + labs(title = 'Wykres skladu portfela zabezpieczającego BSDGH wzgledem czasu',
+           subtitle =  bquote('Przyjęta zmienność w portfelu zabezpieczającym:' ~ sigma['w'] ~ '=' ~ 0.2)) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = text_size, hjust = 0.5),
+        axis.title = element_text(size = text_size),
+        legend.position = "bottom",
+        legend.text = element_text(size = text_size)) +
+  guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
+
+```
+
+
 
 ## Podsumowanie
 
