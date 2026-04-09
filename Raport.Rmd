@@ -2875,7 +2875,7 @@ Jak widzimy, ...
 
 Po omówieniu startegii delta-hedginowej w obecności kosztów transakcyjnych jesteśmy gotowi na przedstawienie strategii delta-gamma-neutralnych. Rozpoczniemy od tzw. naiwnego delta-gamma-hedginu, a następnie przejdziemy do strategii bardziej skomplikowanych.
 
-### Strategia 1: Naiwny Delta-Gamma-Hedging
+## Strategia 1: Naiwny Delta-Gamma-Hedging
 
 Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
 
@@ -2915,7 +2915,7 @@ $$
 $$
 gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
 
-#### Analiza strategii 1.
+## Analiza strategii 1.
 
 ```{r greeks_and_hedge_functions, echo=FALSE, cache=TRUE}
 
@@ -3034,62 +3034,125 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
 ```
 
 
-```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=TRUE}
+```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=FALSE}
 
-plot_PnL_hist <- function(PnL_matrix, slupki) {
-  # wyciągamy P&L na koniec
+# plot_PnL_hist <- function(PnL_matrix, slupki) {
+#   # wyciągamy P&L na koniec
+#   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
+#   
+#   # histogram
+#   hist(final_PnL,
+#        breaks = slupki,
+#        main = "Histogram P&L na koniec okresu",
+#        xlab = paste0("P&L, średnia = ", round(mean(final_PnL), 2)),
+#        col = "blue",
+#        border = "red")
+#   
+#   # dodatkowo: linia średniej
+#   abline(v = mean(final_PnL), col = "red", lwd = 2)
+# }
+
+plot_PnL_hist <- function(PnL_matrix, slupki,
+                          title_txt = "Histogram PnL na koniec okresu",
+                          subtitle_txt = NULL,
+                          xlim_vec = NULL) {
   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
-  
-  # histogram
-  hist(final_PnL,
-       breaks = slupki,
-       main = "Histogram P&L na koniec okresu",
-       xlab = paste0("P&L, średnia = ", round(mean(final_PnL), 2)),
-       col = "blue",
-       border = "red")
-  
-  # dodatkowo: linia średniej
-  abline(v = mean(final_PnL), col = "red", lwd = 2)
+
+  p <- ggplot() +
+    geom_histogram(
+      aes(x = as.vector(final_PnL), y = after_stat(density)),
+      bins  = slupki,
+      fill  = "lightblue",
+      alpha = 0.7
+    ) +
+    geom_vline(xintercept = mean(final_PnL), color = "darkblue", linewidth = 1) +
+    labs(title = title_txt, subtitle = subtitle_txt, x = "", y = "") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 9),
+      plot.subtitle = element_text(size = 8),
+      legend.position = "none"
+    )
+
 }
 ```
 
-```{r run_gamma_simulation, echo=FALSE, cache=TRUE, fig.width=12, fig.height=5, cache=TRUE}
+```{r run_gamma_simulation, echo=FALSE, cache=TRUE, fig.width=7, fig.height=7, cache=TRUE}
 #parametry zadania
+# T <- 1
+# K <- 1700
+# r <- 0.05
+# koszty <- 0.004
+# slupki <- 100
+# 
+# #symulowane trajektorie
+# #S_paths <- path_gbm(n, m, mu=0.2, sigma=0.2, S0)
+# S_paths <- t(simulations[[1]])
+# #S_paths = S_paths[1:500, ]
+# 
+# n <- nrow(S_paths)
+# m <- ncol(S_paths)
+# S0 <- S_paths[1, 1]
+# 
+# 
+# #hedging
+# part_B <- function(T, S0, K, r, koszty, slupki) {
+# mu_est <- drift_vol_estimates["mu", "2021"]
+# sigma_est <- drift_vol_estimates["sigma", "2021"]
+# hedge <- gamma_delta_hedge(S_paths, K, r, sigma_est, T, koszty)
+# plot_PnL_hist(hedge, slupki)
+# }
+# 
+# part_B(T, S0, K, r, koszty, slupki)
+
 T <- 1
 K <- 1700
 r <- 0.05
 koszty <- 0.004
 slupki <- 100
 
-#symulowane trajektorie
-#S_paths <- path_gbm(n, m, mu=0.2, sigma=0.2, S0)
+# trajektorie
 S_paths <- t(simulations[[1]])
-#S_paths = S_paths[1:500, ]
-
-n <- nrow(S_paths)
-m <- ncol(S_paths)
-S0 <- S_paths[1, 1]
-
-
-#hedging
-part_B <- function(T, S0, K, r, koszty, slupki) {
-mu_est <- drift_vol_estimates["mu", "2021"]
 sigma_est <- drift_vol_estimates["sigma", "2021"]
-hedge <- gamma_delta_hedge(S_paths, K, r, sigma_est, T, koszty)
-matplot(t(hedge), type="l", main="P&L hedgingu ", ylab="błąd hedgingu", 
-        col=rgb(0.1,0.1,0.1,alpha=0.4))
-plot_PnL_hist(hedge, slupki)
+
+# bierzemy co 'by' punkt w czasie + zawsze ostatni punkt
+subset_time <- function(S, by) {
+  idx <- unique(c(seq(1, ncol(S), by = by), ncol(S)))
+  S[, idx, drop = FALSE]
 }
 
-part_B(T, S0, K, r, koszty, slupki)
+# robi hedge + wykres (korzysta z plot_PnL_hist)
+make_plot <- function(S_sub, title_txt, xlim_vec) {
+  hedge <- gamma_delta_hedge(S_sub, K, r, sigma_est, T, koszty)
+  final_PnL <- hedge[, ncol(hedge)]
+
+  plot_PnL_hist(
+    hedge, slupki,
+    title_txt = title_txt,
+    subtitle_txt = paste0(
+      "Odchylenie standardowe (z kosztami): ", round(sd(final_PnL), 2),
+      "\nSrednia (z kosztami): ", round(mean(final_PnL), 2)
+    ),
+    xlim_vec = xlim_vec
+  )
+}
+
+p1 <- make_plot(subset_time(S_paths, 1),  "250 re-hedgingow w ciagu roku (codziennie)",  c(-100, 50))
+p2 <- make_plot(subset_time(S_paths, 2),  "125 re-hedgingow w ciagu roku (co dwa dni)",  c(-100, 50))
+p3 <- make_plot(subset_time(S_paths, 4),  "63 re-hedgingi w ciagu roku (co cztery dni)", c(-100, 50))
+p4 <- make_plot(subset_time(S_paths, 7),  "35 re-hedgingow w ciagu roku (co tydzien)",   c(-100, 50))
+p5 <- make_plot(subset_time(S_paths, 21), "12 re-hedgingow w ciagu roku (co miesiac)",   c(-200, 100))
+p6 <- make_plot(S_paths[, c(1, ncol(S_paths)), drop = FALSE], "1 re-hedging w ciagu roku", c(-200, 100))
+
+(p1 | p2) / (p3 | p4) / (p5 | p6)
 ```
 
 
-### Strategia 2: Band Delta-Gamma-Hedging
+## Strategia 2: Band Delta-Gamma-Hedging
 
 Ustalone bandwith dla gamma = 1. potem będzie analiza też dla zmiennego band dla gamma
 
-#### Analiza strategii 2.
+## Analiza strategii 2.
 
 ```{r band_gamma, echo=FALSE, cache=TRUE}
 
@@ -3184,16 +3247,109 @@ band_hedge <- gamma_band_hedge(
   band_gamma = 1
 )
 
-plot_PnL_hist(band_hedge, slupki)
+# plot_PnL_hist(band_hedge, slupki)
 
 ```
 
-```{r, echo=FALSE, cache=TRUE, fig.width=12, fig.height=5}
+```{r, echo=FALSE, cache=TRUE, fig.width=10, fig.height=6}
 
-bands_delta <- c(0.05, 0.25, 1, 2.5, 5, 10)
+# bands_delta <- c(0.05, 0.25, 1, 2.5, 5, 10)
+# band_gamma_fixed <- 1
+# 
+# S_paths = S_paths[1:1000, ]
+# 
+# band_results_list <- list()
+# 
+# for (b in bands_delta) {
+#   hedge_band <- gamma_band_hedge(
+#     S_paths = S_paths,
+#     K = K,
+#     r = r,
+#     sigma = sigma_est,
+#     T = T,
+#     cost_rate = koszty,
+#     band_delta = b,
+#     band_gamma = band_gamma_fixed
+#   )
+#   
+#   final_PnL <- hedge_band[, ncol(hedge_band)]
+#   
+#   band_results_list[[as.character(b)]] <- data.frame(
+#     band_num = b,
+#     PnL = final_PnL
+#   )
+# }
+# 
+# band_results_df <- bind_rows(band_results_list)
+# 
+# facet_stats <- band_results_df %>%
+#   group_by(band_num) %>%
+#   summarise(
+#     srednia = mean(PnL, na.rm = TRUE),
+#     odch_std = sd(PnL, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     band_label = paste0(
+#       "Pasmo delty = ", band_num,
+#       "\nŚrednia = ", round(srednia, 1),
+#       " | Odch.std. = ", round(odch_std, 1)
+#     )
+#   )
+# 
+# band_results_df <- band_results_df %>%
+#   left_join(facet_stats[, c("band_num", "band_label")], by = "band_num")
+# 
+# band_results_df$band_label <- factor(
+#   band_results_df$band_label,
+#   levels = facet_stats$band_label
+# )
+# 
+# mean_lines <- band_results_df %>%
+#   group_by(band_label) %>%
+#   summarise(mean_PnL = mean(PnL, na.rm = TRUE), .groups = "drop")
+# 
+# ggplot(band_results_df, aes(x = PnL)) +
+#   geom_histogram(
+#     bins = 60,
+#     fill = "steelblue",
+#     color = "white",
+#     alpha = 0.9
+#   ) +
+#   geom_vline(
+#     data = mean_lines,
+#     aes(xintercept = mean_PnL),
+#     color = "firebrick",
+#     linewidth = 1
+#   ) +
+#   geom_vline(
+#     xintercept = 0,
+#     color = "gray40",
+#     linetype = "dotted",
+#     linewidth = 0.8
+#   ) +
+#   facet_wrap(~ band_label, ncol = 3, scales = "fixed") +
+#   labs(
+#     title = "Histogramy końcowego P&L dla różnych szerokości pasma delty",
+#     subtitle = "Strategia gamma-band hedging dla europejskiej opcji call na WIG20, przy stałym paśmie gammy",
+#     x = "Końcowy P&L",
+#     y = "Liczność"
+#   ) +
+#   theme_minimal(base_size = 13) +
+#   theme(
+#     plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+#     plot.subtitle = element_text(hjust = 0.5, color = "gray30", size = 12),
+#     strip.text = element_text(face = "bold", size = 11, lineheight = 1.1),
+#     panel.grid.minor = element_blank(),
+#     panel.grid.major.x = element_line(color = "gray85", linewidth = 0.3),
+#     panel.grid.major.y = element_line(color = "gray88", linewidth = 0.3),
+#     panel.spacing = unit(1.2, "lines")
+#   )
+
+bands_delta <- c(0.05, 0.15, 0.25, 0.5, 0.75, 1)
 band_gamma_fixed <- 1
 
-S_paths = S_paths[1:1000, ]
+S_paths <- S_paths[1:1000, , drop = FALSE]
 
 band_results_list <- list()
 
@@ -3208,9 +3364,9 @@ for (b in bands_delta) {
     band_delta = b,
     band_gamma = band_gamma_fixed
   )
-  
+
   final_PnL <- hedge_band[, ncol(hedge_band)]
-  
+
   band_results_list[[as.character(b)]] <- data.frame(
     band_num = b,
     PnL = final_PnL
@@ -3229,8 +3385,8 @@ facet_stats <- band_results_df %>%
   mutate(
     band_label = paste0(
       "Pasmo delty = ", band_num,
-      "\nŚrednia = ", round(srednia, 1),
-      " | Odch.std. = ", round(odch_std, 1)
+      "\nOdch. std.: ", round(odch_std, 1),
+      "\nSrednia: ", round(srednia, 1)
     )
   )
 
@@ -3248,15 +3404,15 @@ mean_lines <- band_results_df %>%
 
 ggplot(band_results_df, aes(x = PnL)) +
   geom_histogram(
+    aes(y = after_stat(density)),
     bins = 60,
-    fill = "steelblue",
-    color = "white",
-    alpha = 0.9
+    fill = "lightblue",
+    alpha = 0.7
   ) +
   geom_vline(
     data = mean_lines,
     aes(xintercept = mean_PnL),
-    color = "firebrick",
+    color = "darkblue",
     linewidth = 1
   ) +
   geom_vline(
@@ -3267,24 +3423,118 @@ ggplot(band_results_df, aes(x = PnL)) +
   ) +
   facet_wrap(~ band_label, ncol = 3, scales = "fixed") +
   labs(
-    title = "Histogramy końcowego P&L dla różnych szerokości pasma delty",
-    subtitle = "Strategia gamma-band hedging dla europejskiej opcji call na WIG20, przy stałym paśmie gammy",
-    x = "Końcowy P&L",
-    y = "Liczność"
+    title = "Histogramy koncowego PnL dla roznych szerokosci pasma delty",
+    subtitle = "Strategia gamma-band hedging (stale pasmo gammy)",
+    x = "",
+    y = ""
   ) +
-  theme_minimal(base_size = 13) +
+  theme_minimal() +
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
-    plot.subtitle = element_text(hjust = 0.5, color = "gray30", size = 12),
-    strip.text = element_text(face = "bold", size = 11, lineheight = 1.1),
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_line(color = "gray85", linewidth = 0.3),
-    panel.grid.major.y = element_line(color = "gray88", linewidth = 0.3),
-    panel.spacing = unit(1.2, "lines")
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5),
+    strip.text = element_text(size = 9),
+    panel.spacing = grid::unit(1.0, "lines"),
+    legend.position = "none"
   )
 
 ```
 
+
+```{r bands_gamma, cache=TRUE, echo=FALSE, fig.width=10, fig.height=6}
+
+bands_gamma <- c(0.05, 0.15, 0.25, 0.5, 0.75, 1)
+
+band_delta_fixed <- 1   # stałe pasmo delty
+
+S_paths <- S_paths[1:1000, , drop = FALSE]
+
+band_results_list <- list()
+
+for (g in bands_gamma) {
+  hedge_band <- gamma_band_hedge(
+    S_paths = S_paths,
+    K = K,
+    r = r,
+    sigma = sigma_est,
+    T = T,
+    cost_rate = koszty,
+    band_delta = band_delta_fixed,
+    band_gamma = g
+  )
+
+  final_PnL <- hedge_band[, ncol(hedge_band)]
+
+  band_results_list[[as.character(g)]] <- data.frame(
+    band_num = g,          # tu przechowujemy gamma
+    PnL = final_PnL
+  )
+}
+
+band_results_df <- bind_rows(band_results_list)
+
+facet_stats <- band_results_df %>%
+  group_by(band_num) %>%
+  summarise(
+    srednia = mean(PnL, na.rm = TRUE),
+    odch_std = sd(PnL, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    band_label = paste0(
+      "Pasmo gammy = ", band_num,
+      "\nOdch. std.: ", round(odch_std, 1),
+      "\nSrednia: ", round(srednia, 1)
+    )
+  )
+
+band_results_df <- band_results_df %>%
+  left_join(facet_stats[, c("band_num", "band_label")], by = "band_num")
+
+band_results_df$band_label <- factor(
+  band_results_df$band_label,
+  levels = facet_stats$band_label
+)
+
+mean_lines <- band_results_df %>%
+  group_by(band_label) %>%
+  summarise(mean_PnL = mean(PnL, na.rm = TRUE), .groups = "drop")
+
+ggplot(band_results_df, aes(x = PnL)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins = 60,
+    fill = "lightblue",
+    alpha = 0.7
+  ) +
+  geom_vline(
+    data = mean_lines,
+    aes(xintercept = mean_PnL),
+    color = "darkblue",
+    linewidth = 1
+  ) +
+  geom_vline(
+    xintercept = 0,
+    color = "gray40",
+    linetype = "dotted",
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ band_label, ncol = 3, scales = "fixed") +
+  labs(
+    title = "Histogramy koncowego PnL dla roznych szerokosci pasma gammy",
+    subtitle = "Strategia gamma-band hedging (stale pasmo delty)",
+    x = "",
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 8, color = "gray40", hjust = 0.5),
+    strip.text = element_text(size = 9),
+    panel.spacing = grid::unit(1.0, "lines"),
+    legend.position = "none"
+  )
+
+```
 
 ### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
