@@ -1663,7 +1663,7 @@ BS_delta_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, pricing_
     
     #   Jeśli zadamy faktyczne notowania to je bierzemy, jeśli nie to symulujemy
     if (!!prod(is.na(real_prices))) {price_path = c(gbm_simulation(S0, mu, market_sigma, t, 250, 1))}
-    else {price_path = real_prices}
+    else {price_path = real_prices[ ,j]}
     
     tstep = 0
     dt = t/n
@@ -1726,13 +1726,17 @@ BS_delta_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, pricing_
 ```
 
 ```{r, echo = FALSE, cache=TRUE}
+##
 transaction_fee = 0.004
-mu = 0
+mu = 0.1
 sigma = 0.2
 r = 0.05
 t = 1
-M = 10000
+n = 250
+M = 1000
 K = 1800
+
+prices_same_sigma = gbm_simulation(S0, mu, sigma, t, n, M)
 
 call_rehedging_data = list(
   BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
@@ -1743,17 +1747,18 @@ call_rehedging_data = list(
   BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')
 )
 
-put_rehedging_data = list(
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
-)
+#put_rehedging_data = list(
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
+#)
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+####
 call_plot1 = ggplot() +  
   geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
   scale_fill_manual(
@@ -2340,27 +2345,35 @@ kable(
 Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarczy przeprowadzać rehedging dużo rzadziej niż każdego dnia. Ciekawym przypadkiem jest poziom tolerancji $\varepsilon = 10$. Niezależnie od częstotliwości hedgowania, nie jesteśmy w stanie osiągnąć żądanego wcześniej prawdopodobieństwa. Dla większych tolerancji jest to osiągane.
 
 ```{r, echo=FALSE, cache=TRUE}
+#####
+M = 1000
+prices_015 = gbm_simulation(S0, mu, 0.15, t, n, M)
+prices_020 = gbm_simulation(S0, mu, 0.2, t, n, M)
+prices_025 = gbm_simulation(S0, mu, 0.25, t, n, M)
+prices_030 = gbm_simulation(S0, mu, 0.30, t, n, M)
+prices_035 = gbm_simulation(S0, mu, 0.35, t, n, M)
+
 risk_histograms_call_data = list(
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.15, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.2, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.25, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 1900, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.3, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 1800, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2100, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2400, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, 0, 2270, 0.05, 0.2, 0.35, 0.05, 1, 250, 1000, 2700, option_premium = NA, real_prices = NA, option_type = 'C')
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 1800, option_premium = NA, real_prices = prices_015, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2100, option_premium = NA, real_prices = prices_015, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2400, option_premium = NA, real_prices = prices_015, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2700, option_premium = NA, real_prices = prices_015, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 1800, option_premium = NA, real_prices = prices_020, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2100, option_premium = NA, real_prices = prices_020, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2400, option_premium = NA, real_prices = prices_020, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2700, option_premium = NA, real_prices = prices_020, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 1800, option_premium = NA, real_prices = prices_025, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2100, option_premium = NA, real_prices = prices_025, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2400, option_premium = NA, real_prices = prices_025, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2700, option_premium = NA, real_prices = prices_025, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 1800, option_premium = NA, real_prices = prices_030, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2100, option_premium = NA, real_prices = prices_030, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2400, option_premium = NA, real_prices = prices_030, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2700, option_premium = NA, real_prices = prices_030, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 1800, option_premium = NA, real_prices = prices_035, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2100, option_premium = NA, real_prices = prices_035, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2400, option_premium = NA, real_prices = prices_035, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, 0, NA, NA, 0.2, NA, 0.05, 1, 250, M, 2700, option_premium = NA, real_prices = prices_035, option_type = 'C')
 )
 
 title_details = list(
@@ -2433,7 +2446,7 @@ for (i in 1:20) {
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=8, fig.align='center', fig.retina=1, dev="cairo_pdf"}
-test = 1
+#######
 (risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) /
 (risk_hists_list[[5]] | risk_hists_list[[6]] | risk_hists_list[[7]] | risk_hists_list[[8]]) /
 (risk_hists_list[[9]] | risk_hists_list[[10]] | risk_hists_list[[11]] | risk_hists_list[[12]]) /
@@ -2467,10 +2480,10 @@ wig20_2020_notowania = wig20_data %>% filter(year(Data) == 2020) %>% pull(Otwarc
 wig20_2019_notowania = wig20_data %>% filter(year(Data) == 2019) %>% pull(Otwarcie)
 
 wig_historyczne_notowania_list = list(
-  wig20_2022_notowania,
-  wig20_2021_notowania,
-  wig20_2020_notowania,
-  wig20_2019_notowania
+  as.matrix(wig20_2022_notowania, nrow = length(wig20_2022_notowania)),
+  as.matrix(wig20_2021_notowania, nrow = length(wig20_2021_notowania)),
+  as.matrix(wig20_2020_notowania, nrow = length(wig20_2020_notowania)),
+  as.matrix(wig20_2019_notowania, nrow = length(wig20_2019_notowania))
 )
 
 historical_call_hedging_data = list(
@@ -2718,11 +2731,13 @@ for (i in 1:4) {
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##
 (call_plots[[1]][[1]] | call_plots[[1]][[2]] | call_plots[[1]][[3]])  / 
   (call_plots[[2]][[1]] | call_plots[[2]][[2]] | call_plots[[2]][[3]])
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##
 (put_plots[[1]][[1]] | put_plots[[1]][[2]] | put_plots[[1]][[3]]) / 
   (put_plots[[2]][[1]] | put_plots[[2]][[2]] | put_plots[[2]][[3]])
 ```
@@ -2745,36 +2760,40 @@ W tej rozważamy analogiczny scenariusz jak w przypadku części A z dwoma znacz
 Zanim przejdziemy do omówienia strategii delta-gamma-neutralnych przyjrzymy się rozważanej wcześniej strategii delta-hedgingowej w obecności kosztów transakcyjnych - to właśnie ta strategia będzie stanowiła dla nas pewien punkt odniesienia. Poniżej przedstawiamy histogramy różnic między portfelem replikującym (delta-hedgingowym), a payoffem replikowanej opcji (czyli waniliowy call o zapadalności $1$ rok, cena wykoniania $1700$) dla różnych częstotliwości rehedgingu; w każdym przypadku zestawiamy histogram różnic przed i po odjęciu kosztów transakcyjnych.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+######
+
 transaction_fee = 0.004
-mu = 0
+mu = 0.1
 sigma = 0.2
 r = 0.05
 t = 1
-M = 10000
 K = 1700
+M = 1000
+
+####
 
 call_rehedging_data = list(
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'C'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'C')
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 250, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 125, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 63, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 35, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 12, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C'),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, sigma, NA, r, t, 2, M, K, option_premium = NA, real_prices = prices_same_sigma, option_type = 'C')
 )
 
-put_rehedging_data = list(
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
-  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
-)
+#put_rehedging_data = list(
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 250, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 125, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 63, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 35, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 12, M, K, option_premium = NA, real_prices = NA, option_type = 'P'),
+#  BS_delta_hedging_algorithm(0, transaction_fee, S0, mu, sigma, sigma, r, t, 2, M, K, option_premium = NA, real_prices = NA, option_type = 'P')
+#)
 ```
 
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
-###
+#########
 call_plot1 = ggplot() +  
   geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
   geom_histogram(aes(x = (as.vector(call_rehedging_data[[1]][[1]]) - as.vector(call_rehedging_data[[1]][[5]])), y =..density.., fill = 'c2'), binwidth=3, alpha=0.7)  +
@@ -2858,7 +2877,7 @@ call_plot6 = ggplot() +
         legend.text = element_text(size = 6))
 
 
-(call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6) +
+((call_plot1 | call_plot2) / (call_plot3 | call_plot4) / (call_plot5 | call_plot6)) +
   plot_annotation(
     title = "Histogramy różnic między wartością portfela zabezpieczającego,\n a payoffem replikowanej opcji w momencie zapadnięcia opcji",
     subtitle = "Opcja CALL, cena wykonania 1700, czas do zapadnięcia 1 rok",
@@ -3577,9 +3596,9 @@ W celu wyznaczenia optymalnej pary wartości parametrów $\epsilon$ i $K^*$ prze
 # beta_upper_limit - maksymalna wartosc bety (ilosci opcji binarnych)
 
 BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu, 
-                                               pricing_sigma, market_sigma, r, t, 
-                                               n, m, K, option_premium = NA, real_prices = NA, 
-                                               option_type = 'C', strike_premium = 50, beta_upper_limit = 10e+8) {
+                                      pricing_sigma, market_sigma, r, t, 
+                                      n, m, K, option_premium = NA, real_prices = NA, 
+                                      option_type = 'C', strike_premium = 50, beta_upper_limit = 10e+8) {
   
   gbm_simulation <- function(S0, mu, sigma, t, n, M) {
     dt <- t / n
@@ -3653,7 +3672,7 @@ BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu,
     
     if (!!prod(is.na(real_prices))) {price_path = c(gbm_simulation(S0, mu, market_sigma, t, 250, 1))}
     else {price_path = real_prices[, j]}
-
+    
     tstep = 0
     dt = t/n
     
@@ -3666,18 +3685,18 @@ BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu,
       option_values_matrix[1, j] = option_premium
     }
     
-    delta_B = BS_binary_delta(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
-    beta = min(beta_upper_limit, BS_gamma(price_path[1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
+    delta_B = BS_binary_delta(price_path[1], round((price_path[1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[1], round((price_path[1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')
+    beta = min(beta_upper_limit, BS_gamma(price_path[1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[1], round((price_path[1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[1], round((price_path[1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')))
     
     betas_matrix[1, j] = beta
     alphas_matrix[1, j] = BS_delta(price_path[1], K, r, pricing_sigma, t, tstep, option_type) - delta_B * beta
-    cashs_matrix[1, j] = cashs_matrix[1, j] - alphas_matrix[1, j] * price_path[1] - beta * (BS_binary_price(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P'))
+    cashs_matrix[1, j] = cashs_matrix[1, j] - alphas_matrix[1, j] * price_path[1] - beta * (BS_binary_price(price_path[1], round((price_path[1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], round((price_path[1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P'))
     
-    latest_binary_call_strike = price_path[1] + strike_premium
-    latest_binary_put_strike = price_path[1] - strike_premium
+    latest_binary_call_strike = round((price_path[1] + strike_premium)/50)*50
+    latest_binary_put_strike = round((price_path[1] - strike_premium)/50)*50
     
     transactions[j] = transactions[j] + 1
-    binaries_values_matrix[1, j] = BS_binary_price(price_path[1], price_path[1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], price_path[1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+    binaries_values_matrix[1, j] = BS_binary_price(price_path[1], round((price_path[1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[1], round((price_path[1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')
     transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(alphas_matrix[1, j]) * price_path[1] + transaction_fee * abs(betas_matrix[1, j]) * (binaries_values_matrix[1, j])
     
     for (i in 1:(n - 1)) {
@@ -3685,14 +3704,14 @@ BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu,
       tstep = tstep + dt
       
       option_values_matrix[i + 1, j] = BS_price(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type)
-
       
-      new_delta_B = BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+      
+      new_delta_B = BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_delta(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')
       #new_beta = min(beta_upper_limit, BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
       
-      new_beta = ifelse(is.nan(BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P'))),
+      new_beta = ifelse(is.nan(BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P'))),
                         0,
-                        min(beta_upper_limit, BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')))
+                        min(beta_upper_limit, BS_gamma(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep) / (BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_gamma(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')))
       )
       
       new_alpha = BS_delta(price_path[floor(length(price_path)*tstep) + 1], K, r, pricing_sigma, t, tstep, option_type) - new_delta_B * new_beta
@@ -3708,19 +3727,19 @@ BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu,
       alphas_matrix[i + 1, j] = new_alpha
       betas_matrix[i + 1, j] = new_beta
       
-      new_binaries_price = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] + strike_premium, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], price_path[floor(length(price_path)*tstep) + 1] - strike_premium, r, pricing_sigma, t, tstep, 'P')
+      new_binaries_price = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] + strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], round((price_path[floor(length(price_path)*tstep) + 1] - strike_premium)/50)*50, r, pricing_sigma, t, tstep, 'P')
       old_binaries_price = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_call_strike, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_put_strike, r, pricing_sigma, t, tstep, 'P')
       cashs_matrix[i + 1, j] = cashs_matrix[i, j] * exp(r*dt) - (alphas_matrix[i + 1, j] - alphas_matrix[i, j])*price_path[floor(length(price_path)*tstep) + 1] + betas_matrix[i, j] * old_binaries_price - betas_matrix[i + 1, j] * new_binaries_price
       
-      latest_binary_call_strike = price_path[floor(length(price_path)*tstep) + 1] + strike_premium
-      latest_binary_put_strike = price_path[floor(length(price_path)*tstep) + 1] - strike_premium
+      latest_binary_call_strike = round((price_path[floor(length(price_path)*tstep) + 1] + strike_premium)/50)*50
+      latest_binary_put_strike = round((price_path[floor(length(price_path)*tstep) + 1] - strike_premium)/50)*50
       
       binaries_values_matrix[i + 1, j] = BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_call_strike, r, pricing_sigma, t, tstep, 'C') + BS_binary_price(price_path[floor(length(price_path)*tstep) + 1], latest_binary_put_strike, r, pricing_sigma, t, tstep, 'P')
       transactions[j] = transactions[j] + 1
       transaction_costs[j] = transaction_costs[j] + transaction_fee * abs(alphas_matrix[i, j] - alphas_matrix[i + 1, j]) * price_path[floor(length(price_path)*tstep) + 1] + transaction_fee * abs(betas_matrix[i, j]) * old_binaries_price + transaction_fee * abs(betas_matrix[i + 1, j])* new_binaries_price
     }
     
-
+    
     if (option_type == 'C') {payoff = max(price_path[length(price_path)] - K, 0)}
     else {payoff = max(K - price_path[length(price_path)], 0)}
     
@@ -3739,11 +3758,12 @@ BS_gamma_hedging_algorithm = function(epsilon, transaction_fee, S0, mu,
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+
 # Epsilony jakie rozwazamy (dla innych, tj. wiekszych od 0.11 slabe rezultaty)
 epsilon_range = c(0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08)
 # K* jakie rozwazamy (dla wiekszych problem, bo zdaza sie ze cena spada ponizej 700, i mamy negatywny strike dla binarnych putow, poza tym
 # wystarczajaco dobre wyniki zachodza juz dla nizszych)
-strike_premium_range = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700)
+strike_premium_range = c(100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750)
 
 # Parametry
 transaction_fee = 0.004
@@ -3754,7 +3774,7 @@ market_sigma = 0.2
 r = 0.05
 t = 1
 n = 250
-M = 250
+M = 100
 K = 1700
 beta_limit = 10^4
 
@@ -3783,12 +3803,14 @@ for (i in 1:length(epsilon_range)) {
 # przyjmujac np. positive_limit = 100 mozemy wyeliminowac takie obserwacje (dla positive_limit = Inf rozwazamy wszystkie obserwacje)
 positive_limit = Inf
 
+prices = gbm_simulation(S0, mu, market_sigma, t, n, M)
+
 # Wyznaczanie danych (to sie chwilke kompiluje, u mnie dla M = 100 tak z 5 minut)
 for (i in 1:length(epsilon_range)) {
   for (j in 1:length(strike_premium_range)) {
-    gamma_hedging_data_list[[i]][[j]] = BS_gamma_hedging_algorithm(epsilon_range[i], transaction_fee, S0,
-                                                                   mu, pricing_sigma, market_sigma, r, t,
-                                                                   n, M, K, strike_premium = strike_premium_range[j],
+    gamma_hedging_data_list[[i]][[j]] = BS_gamma_hedging_algorithm(epsilon_range[i], transaction_fee, NA,
+                                                                   NA, pricing_sigma, NA, r, t,
+                                                                   n, M, K, real_prices = prices, strike_premium = strike_premium_range[j],
                                                                    beta_upper_limit = beta_limit)
     
     gamma_hedging_means_matrix[i, j] = mean((gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]])[gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
@@ -3796,11 +3818,10 @@ for (i in 1:length(epsilon_range)) {
     gamma_hedging_mean_betas_matrix[i, j] = mean(gamma_hedging_data_list[[i]][[j]][[7]][, gamma_hedging_data_list[[i]][[j]][[1]] - gamma_hedging_data_list[[i]][[j]][[5]] < positive_limit])
   }
 }
-
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=9, cache=TRUE}
-###
+#####
 df_sds = melt(t(gamma_hedging_sds_matrix))
 df_sds$Var1 = factor(df_sds$Var1)
 df_sds$Var2 = factor(df_sds$Var2)
@@ -3841,33 +3862,33 @@ means_plot = ggplot(df_means, aes(Var1, Var2, fill = value)) +
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=6, fig.width=7, fig.align='center', cache=TRUE}
-####
+######
 means_plot
 ```
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=6, fig.width=7, fig.align='center', cache=TRUE}
-####
+#######
 sds_plot
 ```
 
-Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają jak najwyższą średnią oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy dojść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.05, 0.055\}$ oraz $K^* \in \{400, 450, 500\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedginu - jak się później przekonamy (podczas analizy czułości na zmienność rynkową oraz porównaniu obu strategii na notowaniach historycznych), tak jednak nie jest.
+Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają jak najwyższą średnią oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy dojść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.06, 0.065\}$ oraz $K^* \in \{500, 550, 600\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedginu - jak się później przekonamy (podczas analizy czułości na zmienność rynkową oraz porównaniu obu strategii na notowaniach historycznych), tak jednak nie jest.
 
 #### Analiza strategii 3.  
 
 \leavevmode\par
 
-W poprzednim podrozdziale wyznaczyliśmy zbiór parametrów $\epsilon$ i $K^*$, dla których startegia zwracała najlepsze wyniki pod względem średniej oraz odchylenia standardowego. W tym podrozdziale przeanalizujemy dokładniej stategię korzystając z wartości parametrów $(\epsilon, K^*) = (0.05, 450)$. Następnie porównamy ją ze standardową strategią delta-hedgingową, zarówno na notowaniach symulacyjnych jak i historycznych. Rozpoczniemy od analizy histogramu różnic między portfelem replikacyjnym, a payoffem replikowanej opcji.
+W poprzednim podrozdziale wyznaczyliśmy zbiór parametrów $\epsilon$ i $K^*$, dla których startegia zwracała najlepsze wyniki pod względem średniej oraz odchylenia standardowego. W tym podrozdziale przeanalizujemy dokładniej stategię korzystając z wartości parametrów $(\epsilon, K^*) = (0.065, 600)$. Następnie porównamy ją ze standardową strategią delta-hedgingową, zarówno na notowaniach symulacyjnych jak i historycznych. Rozpoczniemy od analizy histogramu różnic między portfelem replikacyjnym, a payoffem replikowanej opcji.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=3, fig.width=6, fig.align='centre', cache=TRUE}
 plotbsgh_hist = ggplot() +  
-  geom_histogram(aes(x = as.vector(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
+  geom_histogram(aes(x = as.vector(gamma_hedging_data_list[[14]][[11]][[1]] - gamma_hedging_data_list[[14]][[11]][[5]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
   scale_fill_manual(
     name = "",
     values = c("c1" = "darkblue"),
     labels = c("c1" = "")
   ) + xlab('') + ylab('') + xlim(c(-50, 25)) +
   ggtitle("", 
-          subtitle = paste('Odchylenie standardowe:', round(sd(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]]), 2), '\nŚrednia: ', round(mean(as.vector(gamma_hedging_data_list[[11]][[9]][[1]] - gamma_hedging_data_list[[11]][[9]][[5]])), 2)
+          subtitle = paste('Odchylenie standardowe:', round(sd(gamma_hedging_data_list[[14]][[11]][[1]] - gamma_hedging_data_list[[14]][[11]][[5]]), 2), '\nŚrednia: ', round(mean(as.vector(gamma_hedging_data_list[[14]][[11]][[1]] - gamma_hedging_data_list[[14]][[11]][[5]])), 2)
                            ))  + theme_minimal() +
   theme(plot.title = element_text(size = 9), plot.subtitle = element_text(size = 8), legend.position = "none")
 
@@ -3883,20 +3904,20 @@ plotbsgh_hist + plot_annotation(
 
 (komentarz do histogramu)
 
-Przy opisie strategii wspomnieliśmy, że rolą parametru $\epsilon$ jest ograniczenie liczby transakcji - w obecności niezerowych kosztów transakcyjnych jest to oczywiście coś pożądanego w strategii replikującej, o ile nie wpływa zbyt negatywnie na jej skuteczność. W przypadku rozważanej przez nas wartości parametru $\epsilon$ dostrzegamy istotną redukcję liczby transakcji, bowiem średnio aktualizujemy portfel `r round(mean(gamma_hedging_data_list[[11]][[9]][[4]]))` razy, a ponieważ przy każdej aktualizacji portfela dokonujemy zmian w liczbie posiadanego indeksu WIG20 i liczbie posiadanych opcji binarnych, średnio wykonujemy `r 2*round(mean(gamma_hedging_data_list[[11]][[9]][[4]]))` transakcji.
+Przy opisie strategii wspomnieliśmy, że rolą parametru $\epsilon$ jest ograniczenie liczby transakcji - w obecności niezerowych kosztów transakcyjnych jest to oczywiście coś pożądanego w strategii replikującej, o ile nie wpływa zbyt negatywnie na jej skuteczność. W przypadku rozważanej przez nas wartości parametru $\epsilon$ dostrzegamy istotną redukcję liczby transakcji, bowiem średnio aktualizujemy portfel `r round(mean(gamma_hedging_data_list[[14]][[11]][[4]]))` razy, a ponieważ przy każdej aktualizacji portfela dokonujemy zmian w liczbie posiadanego indeksu WIG20 i liczbie posiadanych opcji binarnych, średnio wykonujemy `r 2*round(mean(gamma_hedging_data_list[[14]][[11]][[4]]))` transakcji.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
-set.seed(2)
-
+####
+M = 1000
 dh_data_ds = list(
-  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.15,
-                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
-  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.2,
-                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
-  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.25,
-                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0),
-  BS_gamma_hedging_algorithm(0, transaction_fee, S0, mu, pricing_sigma, 0.3,
-                             r, t, 63, 100, K, strike_premium = 10, beta_upper_limit = 0)
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, pricing_sigma, NA,
+                             r, t, 63, M, K, real_prices = prices_015),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, pricing_sigma, NA,
+                             r, t, 63, M, K, real_prices = prices_020),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, pricing_sigma, NA,
+                             r, t, 63, M, K, real_prices = prices_025),
+  BS_delta_hedging_algorithm(0, transaction_fee, NA, NA, pricing_sigma, NA,
+                             r, t, 63, M, K, real_prices = prices_030)
 )
 
 
@@ -3914,25 +3935,29 @@ dh_sds_ds = c(
   sd(dh_data_ds[[4]][[1]] - dh_data_ds[[4]][[5]])
 )
 
-eps = 0.05
-binary_K = 450
+eps = 0.065
+binary_K = 600
 
 bsgh_data_ds = list(
-  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
-                             mu, pricing_sigma, 0.15, r, t,
-                             n, 100, K, strike_premium = binary_K,
+  BS_gamma_hedging_algorithm(eps, transaction_fee, NA,
+                             NA, pricing_sigma, NA, r, t,
+                             n, M, K, strike_premium = binary_K,
+                             real_prices = prices_015,
                              beta_upper_limit = beta_limit),
-  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
-                             mu, pricing_sigma, 0.2, r, t,
-                             n, 100, K, strike_premium = binary_K,
+  BS_gamma_hedging_algorithm(eps, transaction_fee, NA,
+                             NA, pricing_sigma, NA, r, t,
+                             n, M, K, strike_premium = binary_K,
+                             real_prices = prices_020,
                              beta_upper_limit = beta_limit),
-  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
-                             mu, pricing_sigma, 0.25, r, t,
-                             n, 100, K, strike_premium = binary_K,
+  BS_gamma_hedging_algorithm(eps, transaction_fee, NA,
+                             NA, pricing_sigma, NA, r, t,
+                             n, M, K, strike_premium = binary_K,
+                             real_prices = prices_025,
                              beta_upper_limit = beta_limit),
-  BS_gamma_hedging_algorithm(eps, transaction_fee, S0,
-                             mu, pricing_sigma, 0.3, r, t,
-                             n, 100, K, strike_premium = binary_K,
+  BS_gamma_hedging_algorithm(eps, transaction_fee, NA,
+                             NA, pricing_sigma, NA, r, t,
+                             n, M, K, strike_premium = binary_K,
+                             real_prices = prices_030,
                              beta_upper_limit = beta_limit)
 )
 
@@ -3992,8 +4017,8 @@ pv_dh_matrix = matrix(nrow = 251, ncol = length(pricing_sigmas))
 n = 250
 k = 251
 beta_limit = 10^4
-strike_p = 450
-eps = 0.05
+strike_p = 600
+eps = 0.065
 wig20_2022_notowania = matrix(wig20_2022_notowania, nrow = 251)
 
 for (i in 1:length(pricing_sigmas)) {
