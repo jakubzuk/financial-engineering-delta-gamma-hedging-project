@@ -3373,7 +3373,7 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
 ```{r, echo=FALSE, cache=FALSE, fig.width=10, fig.height=6}
 
 bands_delta <- c(0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.1, 0.5)
-band_gamma_fixed <- 0.001
+band_gamma_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
 
@@ -3473,7 +3473,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 ```{r bands_gamma, cache=FALSE, echo=FALSE, fig.width=10, fig.height=6}
 
 bands_gamma <- c(0.00005, 0.00025, 0.0005, 0.00075, 0.001, 0.01, 0.1, 0.5)
-band_delta_fixed <- 0.005
+band_delta_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
 
@@ -3571,7 +3571,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r, echo=FALSE, cache=TRUE, fig.height=14, fig.width=11, warning=FALSE}
 
-delta_values <- seq(0.001, 0.01, by = 0.002)
+delta_values <- seq(0.001, 0.01, by = 0.001)
 gamma_values <- seq(0.00005, 0.0005, by = 0.00005)
 
 mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
@@ -3671,177 +3671,6 @@ sds_plot <- ggplot(df_sds, aes(Var1, Var2, fill = value)) +
   )
 
 means_plot / sds_plot
-
-```
-
-## Strategia 2.5
-
-```{r, echo=FALSE, cache=TRUE}
-
-gamma_band_error_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_error) {
-  
-  n <- nrow(S_paths)
-  m <- ncol(S_paths)
-  dt <- T / (m - 1)
-  
-  PnL <- matrix(0, n, m)
-  rehedges <- numeric(n)
-  
-  for (i in 1:n) {
-    S <- S_paths[i, ]
-    V <- call_price(S[1], K, r, sigma, T)
-    
-    # === HEDGING NA STARCIE ===
-    tau0 <- T
-    delta1 <- call_delta(S[1], K, r, sigma, tau0)
-    gamma1 <- call_gamma(S[1], K, r, sigma, tau0)
-    delta2 <- binary_call_delta(S[1], K, r, sigma, tau0)
-    gamma2 <- binary_call_gamma(S[1], K, r, sigma, tau0)
-    
-    if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
-    
-    beta <- -gamma1 / gamma2
-    beta <- beta / (1 + abs(beta) / 30)
-    alpha <- -(delta1 + beta * delta2)
-    
-    C2_0 <- binary_call_price(S[1], K, r, sigma, tau0)
-    initial_cost <- cost_rate * (abs(alpha) * S[1] + abs(beta) * C2_0)
-    V <- V - initial_cost
-    
-    phi_prev <- alpha
-    w_prev   <- beta
-    rehedge_count <- 1
-    
-    for (t in 1:(m - 1)) {
-      tau <- max(T - (t - 1) * dt, dt)
-      
-      C1_t <- call_price(S[t], K, r, sigma, tau)
-      C2_t <- binary_call_price(S[t], K, r, sigma, tau)
-      
-      if (t == (m - 1)) {
-        C1_next <- max(S[t + 1] - K, 0)
-        C2_next <- ifelse(S[t + 1] > K, 1, 0)
-      } else {
-        C1_next <- call_price(S[t + 1], K, r, sigma, tau - dt)
-        C2_next <- binary_call_price(S[t + 1], K, r, sigma, tau - dt)
-      }
-      
-      delta1 <- call_delta(S[t], K, r, sigma, tau)
-      gamma1 <- call_gamma(S[t], K, r, sigma, tau)
-      delta2 <- binary_call_delta(S[t], K, r, sigma, tau)
-      gamma2 <- binary_call_gamma(S[t], K, r, sigma, tau)
-      
-      if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
-      
-      w_target <- -gamma1 / gamma2
-      w_target <- w_target / (1 + abs(w_target) / 30)
-      
-      hedge_error <- V - C1_t
-      
-      if (abs(hedge_error) > band_error) {
-        phi <- -(delta1 + w_target * delta2)
-        w <- w_target
-        rehedge_count <- rehedge_count + 1
-      } else {
-        phi <- phi_prev
-        w <- w_prev
-      }
-      
-      cost <- cost_rate * (
-        abs(phi - phi_prev) * S[t] +
-        abs(w - w_prev) * C2_t
-      )
-      
-      V <- V + phi*(S[t+1]-S[t]) + w*(C2_next - C2_t) + r*V*dt - cost
-      PnL[i, t + 1] <- V - C1_next
-      
-      phi_prev <- phi
-      w_prev <- w
-    }
-    rehedges[i] <- rehedge_count
-  }
-  
-  return(list(PnL = PnL, rehedges = rehedges))
-}
-
-```
-
-```{r, echo=FALSE, cache=TRUE, fig.height=7, fig.width=7}
-
-band_error_values <- c(5, 100, 200, 250, 400, 600)
-
-S_paths <- S_paths[1:1000, , drop = FALSE]
-band_results_list <- list()
-
-for (b in band_error_values) {
-  res <- gamma_band_error_hedge(
-    S_paths    = S_paths,
-    K          = K,
-    r          = r,
-    sigma      = sigma_est,
-    T          = T,
-    cost_rate  = koszty,
-    band_error = b
-  )
-  
-  final_PnL <- res$PnL[, ncol(res$PnL)]
-  rehedges  <- res$rehedges
-  
-  band_results_list[[as.character(b)]] <- data.frame(
-    band_num = b,
-    PnL = final_PnL,
-    rehedges = rehedges
-  )
-}
-
-band_results_df <- bind_rows(band_results_list)
-
-facet_stats <- band_results_df %>%
-  group_by(band_num) %>%
-  summarise(
-    srednia = mean(PnL, na.rm = TRUE),
-    odch_std = sd(PnL, na.rm = TRUE),
-    avg_rehedges = mean(rehedges, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    band_label = paste0(
-      "Band Error = ", band_num,
-      "\nOdch. std.: ", round(odch_std, 1),
-      "\nSrednia: ", round(srednia, 1),
-      "\nRehedgingi: ", round(avg_rehedges, 1)
-    )
-  )
-
-band_results_df <- band_results_df %>%
-  left_join(facet_stats[, c("band_num", "band_label")], by = "band_num")
-
-band_results_df$band_label <- factor(
-  band_results_df$band_label,
-  levels = facet_stats$band_label
-)
-
-mean_lines <- band_results_df %>%
-  group_by(band_label) %>%
-  summarise(mean_PnL = mean(PnL, na.rm = TRUE), .groups = "drop")
-
-ggplot(band_results_df, aes(x = PnL)) +
-  geom_histogram(aes(y = after_stat(density)), bins = 60, fill = "steelblue", alpha = 0.75) +
-  geom_vline(data = mean_lines, aes(xintercept = mean_PnL), color = "darkblue", linewidth = 1.1) +
-  geom_vline(xintercept = 0, color = "red", linetype = "dashed", linewidth = 0.9) +
-  facet_wrap(~ band_label, ncol = 3, scales = "fixed") +
-  labs(
-    title = "Histogramy PnL - Band na Hedging Error",
-    subtitle = "Trigger: |V - C| > band_error | Gamma hedging tylko na starcie",
-    x = "PnL końcowy",
-    y = "Gęstość"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 10, color = "gray30", hjust = 0.5),
-    strip.text = element_text(size = 10, lineheight = 1.1)
-  )
 
 ```
 
