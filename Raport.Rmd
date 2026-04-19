@@ -3,9 +3,9 @@ title: "Delta i gamma hedging"
 author: "Tomasz Kąkol, Mikołaj Pamuła, Jakub Żuk"
 date: "2026-03-07"
 output:
-  pdf_document: 
-      toc: false
-      toc_depth: 3
+  pdf_document:
+    toc: true
+    toc_depth: 3
   html_document:
     df_print: paged
 toc-title: Spis treści
@@ -256,8 +256,8 @@ Zaczniemy od przeanalizowaniu wykresów symulacji notowań indeksu uwzględniaj�
 # Parametry t, n, M dla poniższych symulacji
 T_val <- 1
 n <- 250
-M <- 100
-##
+M <- 10000
+
 # Podział okresu symulowanych ścieżek
 time_seq <- seq(0, T_val, length.out = n + 1)
 
@@ -276,7 +276,7 @@ simulations <- list(
 
 ```{r gbm_chart_2022, echo=FALSE, cache=TRUE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300}
 title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
-reset = 5
+reset = 4
 # Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
 plot_simulation_panel <- function(sim_matrix, title_suffix, actual_data) {
   df_sim <- as.data.frame(sim_matrix) %>% 
@@ -295,7 +295,7 @@ plot_simulation_panel <- function(sim_matrix, title_suffix, actual_data) {
   
   ggplot() +
     geom_line(data = df_sim, aes(x = time, y = price, group = sim), 
-              color = "black", alpha = 0.1, linewidth = 0.1)  +
+              color = "black", alpha = 0.01, linewidth = 0.1)  +
     scale_y_continuous(limits = c(min = 1000, max = 5500)) + #  trochę prymitywnie, ale na razie dodaje ograniczeia na osi Y 'z palca'
     geom_line(data = df_actual, aes(x = time, y = price, color = "WIG20 2022"), 
               linewidth = 1) +
@@ -371,7 +371,7 @@ Jak widzimy, w każdym z powyższych przypadków faktyczne notowania indeksu z r
 # w celu wyznaczenia trajektorii notowań
 # n - liczba 'kroków', tj. podział okresu na części,
 # M - liczba symulacji, tj. liczba konkretnych wysymulowanych ścieżek
-###
+
 bootstrap_simulation <- function(S0, returns_set, n, M) {
   sampled_increments <- matrix(sample(returns_set, size = M * n, replace = TRUE), nrow = M, ncol = n)
   sampled_increments_transformed <- cbind(rep(1, M), 1 + sampled_increments)
@@ -382,8 +382,7 @@ bootstrap_simulation <- function(S0, returns_set, n, M) {
 ```
 
 ```{r bootstrap_simulations_2022, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
-###
-reset = 6
+reset = 2
 ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
 ret_2019_2021 <- wig20_data %>% filter(year(Data) %in% 2019:2021) %>% pull(Zwrot)
@@ -399,7 +398,7 @@ bootstrap_simulations_list <- list(
 ```
 
 ```{r bootstrap_chart_2022, echo=FALSE, fig.width=12, fig.height=10, dev="png", dpi=300, cache=TRUE}
-reset = 5
+reset = 3
 # Funkcja do wykresów bootstrap ##
 plot_boot_panel <- function(sim_matrix, title_suffix, actual_data) {
   df_sim <- as.data.frame(sim_matrix) %>% 
@@ -664,7 +663,7 @@ time_seq <- seq(0, T_val, length.out = n + 1)
 ```
 
 ```{r gbm_simulations_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
-reset = 6
+reset = 5
 # Parametry t, n, M dla poniższych symulacji - 2 LATA
 T_val <- 2
 n <- 500  # 250 dni * 2 lata
@@ -676,10 +675,10 @@ time_seq <- seq(0, T_val, length.out = n + 1)
 # Wartość początkowa indeksu dla symulowanych ścieżek
 dane_2022_2023 <- wig20_data %>% filter(year(Data) %in% c(2022, 2023))
 S0 <- dane_2022_2023$Otwarcie[1]
-M = 1000
+
 # Symulacje na 2 lata
 simulations_2y <- list(
-  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, M),
+  gbm_simulation(S0, drift_vol_estimates["mu", "2021"], drift_vol_estimates["sigma", "2021"], T_val, n, 10000),
   gbm_simulation(S0, drift_vol_estimates["mu", "2020"], drift_vol_estimates["sigma", "2020"], T_val, n, M),
   gbm_simulation(S0, drift_vol_estimates["mu", "2019"], drift_vol_estimates["sigma", "2019"], T_val, n, M),
   gbm_simulation(S0, drift_vol_estimates["mu", "2018"], drift_vol_estimates["sigma", "2018"], T_val, n, M)
@@ -687,9 +686,9 @@ simulations_2y <- list(
 ```
 
 ```{r gbm_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
-###
+
 title_descriptions_details <- c('2021', '2020-2021', '2019-2021', '2018-2021')
-reset = 4
+reset = 3
 # Funkcja pomocnicza do tworzenia pojedynczego wykresu w ggplot
 plot_simulation_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
   df_sim <- as.data.frame(sim_matrix) %>% 
@@ -776,8 +775,7 @@ legend_plot <- ggplot() +
 Jak widać, symulacje na okres dwuletni wydają się być znacznie lepiej dopasowane do faktycznych notowań indeksu z okresu 2022-2023, w porównaniu do symulacji jakie przeprowadziliśmy na sam rok 2022 - widzimy, że w przypadku trzech z czterech okresów końcowa wartość faktycznych notowań znajduje się w pobliżu mediany trajektorii symulacji; drugim pozytywnym znakiem jest fakt, że we wszystkich czterech okresach po pierwszym roku symulacji faktyczne notowania indeksu z roku 2023 znajdują się powyżej krzywej kwantylowej pięcioprocentowej. Analizując same wyniki symulacji, jedna rzecz wyraźnie rzuca się w oczy - symulacje odpowiadające okresowi pierwszemu (sam rok 2021) mają zauważalną tendencję wzrostową w porównaniu do pozostałych trzech okresów; widać to szczególnie przy krzywej mediany, która ma dodatnie nachylenie względem osi poziomej.
 
 ```{r bootstrap_simulations_2022_2023, echo=FALSE, cache=TRUE}
-reset = 7
-M = 1000
+reset = 6
 # Zbiory zwrotów
 ret_2021 <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 ret_2020_2021 <- wig20_data %>% filter(year(Data) %in% 2020:2021) %>% pull(Zwrot)
@@ -786,15 +784,15 @@ ret_2018_2021 <- wig20_data %>% filter(year(Data) %in% 2018:2021) %>% pull(Zwrot
 ##
 # Symulacje bootstrapowe na 2 lata
 bootstrap_simulations_2y <- list(
-  bootstrap_simulation(S0, ret_2021, n, M),
-  bootstrap_simulation(S0, ret_2020_2021, n, M),
-  bootstrap_simulation(S0, ret_2019_2021, n, M),
-  bootstrap_simulation(S0, ret_2018_2021, n, M)
+  bootstrap_simulation(S0, ret_2021, n, 10000),
+  bootstrap_simulation(S0, ret_2020_2021, n, 10000),
+  bootstrap_simulation(S0, ret_2019_2021, n, 10000),
+  bootstrap_simulation(S0, ret_2018_2021, n, 10000)
 )
 ```
 
-```{r bootstrap_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", dev="png", dpi=300, cache=TRUE}
-reset = 8
+```{r bootstrap_chart_2022_2023, echo=FALSE, fig.width=12, fig.height=10, out.width="100%", cache=TRUE}
+reset = 6
 #print('test')
 # Funkcja do wykresów bootstrap
 plot_boot_panel_2y <- function(sim_matrix, title_suffix, actual_data) {
@@ -1150,7 +1148,7 @@ correlated_gbm_simulation <- function(S01, mu1, sigma1, S02, mu2, sigma2, p, t, 
 }
 ```
 
-```{r, echo=FALSE, cache = TRUE,}
+```{r, echo=FALSE, cache = TRUE}
 # Dane z KGHM, ten chunk jest tylko na potrzeby poniższych wykresów testowych,
 # ogólnie gdzieś wcześniej można wczytać te dane i obrobić (a te zmienne wig2021, kghm2021 itd.
 # mozemy pozniej usunac)
@@ -1438,7 +1436,7 @@ $$\text{Payoff} = \max{(K - S(T), 0)}$$
 
 (KID, standard - STRONA GPW https://www.gpw.pl/standardy-warunki-obrotu)
 
-```{r, echo=FALSE, fig.width=9, fig.height=4, out.width="100%", dev="png", dpi=300, cache=TRUE}
+```{r, echo=FALSE}
 
 # Parametry
 K <- 100  # strike
@@ -3094,7 +3092,7 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
 ```
 
 
-```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=TRUE}
+```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=FALSE}
 
 # plot_PnL_hist <- function(PnL_matrix, slupki) {
 #   # wyciągamy P&L na koniec
@@ -4321,7 +4319,7 @@ $$
 
 ### Symulacje notowań dwóch aktywów skorelowanych
 
-W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi 0.69723 (?), co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około 71% zgodności.
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi 0.69723 (?), co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około $71\%$ zgodności.
 
 #### Symulacje metodą standardową (skorelowane Geometryczne Ruchy Browna)  
 $\\$
