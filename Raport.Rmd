@@ -2833,7 +2833,7 @@ call_rehedging_data = list(
 ```
 
 
-```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
+```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7}
 ###########
 call_plot1 = ggplot() +  
   geom_histogram(aes(x = as.vector(call_rehedging_data[[1]][[1]]), y =..density.., fill = 'c1'), binwidth=3, alpha=0.3) +
@@ -3257,9 +3257,12 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
   PnL <- matrix(0, n, m)
   rehedges <- numeric(n)
   
+  # Diagnostyka - zbieramy statystyki
+  delta_stats <- numeric(n)
+  gamma_stats <- numeric(n)
+  
   for (i in 1:n) {
     S <- S_paths[i, ]
-    
     V <- call_price(S[1], K, r, sigma, T)
 
     tau0 <- T
@@ -3283,6 +3286,9 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
     w_prev   <- beta
     rehedge_count <- 1   
 
+    delta_values_path <- numeric(m-1)
+    gamma_values_path <- numeric(m-1)
+    
     for (t in 1:(m - 1)) {
       tau <- max(T - (t - 1) * dt, dt)
       
@@ -3308,10 +3314,9 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
       
       portfolio_delta <- phi_prev + delta1 + w_prev * delta2
       portfolio_gamma <- gamma1 + w_prev * gamma2
-#       if (t %% 50 == 0) {  # co 50 kroków wypisz
-#   cat(sprintf("Path %d, t=%d | portfolio_delta=%.4f | portfolio_gamma=%.4f | band_d=%.4f | band_g=%.2f\n",
-#               i, t, portfolio_delta, portfolio_gamma, band_delta, band_gamma))
-# }
+      
+      delta_values_path[t] <- abs(portfolio_delta)
+      gamma_values_path[t] <- abs(portfolio_gamma)
       
       if (abs(portfolio_delta) > band_delta || abs(portfolio_gamma) > band_gamma) {
         phi <- -(delta1 + w_target * delta2)
@@ -3333,125 +3338,43 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
       phi_prev <- phi
       w_prev <- w
     }
+    
     rehedges[i] <- rehedge_count
+    delta_stats[i] <- mean(delta_values_path, na.rm = TRUE)
+    gamma_stats[i] <- mean(gamma_values_path, na.rm = TRUE)
   }
+  
+  # Diagnostyka na końcu
+  # cat("\n=== DIAGNOSTYKA DELTA I GAMMA ===\n")
+  # cat("Średnia |portfolio_delta| na ścieżkach:", round(mean(delta_stats), 4), "\n")
+  # cat("Średnia |portfolio_gamma| na ścieżkach:", round(mean(gamma_stats), 4), "\n")
+  # cat("Maksymalna |portfolio_delta|:", round(max(delta_stats), 4), "\n")
+  # cat("Maksymalna |portfolio_gamma|:", round(max(gamma_stats), 4), "\n")
+  # cat("Średnia liczba rehedgingów:", round(mean(rehedges), 2), "\n\n")
   
   return(list(PnL = PnL, rehedges = rehedges))
 }
 
-mu_est <- drift_vol_estimates["mu", "2021"]
-sigma_est <- drift_vol_estimates["sigma", "2021"]
-
-band_hedge <- gamma_band_hedge(
-  S_paths = S_paths,
-  K = K,
-  r = r,
-  sigma = sigma_est,
-  T = T,
-  cost_rate = koszty,
-  band_delta = 0.05,
-  band_gamma = 1
-)
+# mu_est <- drift_vol_estimates["mu", "2021"]
+# sigma_est <- drift_vol_estimates["sigma", "2021"]
+# 
+# band_hedge <- gamma_band_hedge(
+#   S_paths = S_paths,
+#   K = K,
+#   r = r,
+#   sigma = sigma_est,
+#   T = T,
+#   cost_rate = koszty,
+#   band_delta = 0.05,
+#   band_gamma = 1
+# )
 
 
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=10, fig.height=6}
 
-# bands_delta <- c(0.05, 0.25, 1, 2.5, 5, 10)
-# band_gamma_fixed <- 1
-# 
-# S_paths = S_paths[1:1000, ]
-# 
-# band_results_list <- list()
-# 
-# for (b in bands_delta) {
-#   hedge_band <- gamma_band_hedge(
-#     S_paths = S_paths,
-#     K = K,
-#     r = r,
-#     sigma = sigma_est,
-#     T = T,
-#     cost_rate = koszty,
-#     band_delta = b,
-#     band_gamma = band_gamma_fixed
-#   )
-#   
-#   final_PnL <- hedge_band[, ncol(hedge_band)]
-#   
-#   band_results_list[[as.character(b)]] <- data.frame(
-#     band_num = b,
-#     PnL = final_PnL
-#   )
-# }
-# 
-# band_results_df <- bind_rows(band_results_list)
-# 
-# facet_stats <- band_results_df %>%
-#   group_by(band_num) %>%
-#   summarise(
-#     srednia = mean(PnL, na.rm = TRUE),
-#     odch_std = sd(PnL, na.rm = TRUE),
-#     .groups = "drop"
-#   ) %>%
-#   mutate(
-#     band_label = paste0(
-#       "Pasmo delty = ", band_num,
-#       "\nŚrednia = ", round(srednia, 1),
-#       " | Odch.std. = ", round(odch_std, 1)
-#     )
-#   )
-# 
-# band_results_df <- band_results_df %>%
-#   left_join(facet_stats[, c("band_num", "band_label")], by = "band_num")
-# 
-# band_results_df$band_label <- factor(
-#   band_results_df$band_label,
-#   levels = facet_stats$band_label
-# )
-# 
-# mean_lines <- band_results_df %>%
-#   group_by(band_label) %>%
-#   summarise(mean_PnL = mean(PnL, na.rm = TRUE), .groups = "drop")
-# 
-# ggplot(band_results_df, aes(x = PnL)) +
-#   geom_histogram(
-#     bins = 60,
-#     fill = "steelblue",
-#     color = "white",
-#     alpha = 0.9
-#   ) +
-#   geom_vline(
-#     data = mean_lines,
-#     aes(xintercept = mean_PnL),
-#     color = "firebrick",
-#     linewidth = 1
-#   ) +
-#   geom_vline(
-#     xintercept = 0,
-#     color = "gray40",
-#     linetype = "dotted",
-#     linewidth = 0.8
-#   ) +
-#   facet_wrap(~ band_label, ncol = 3, scales = "fixed") +
-#   labs(
-#     title = "Histogramy końcowego P&L dla różnych szerokości pasma delty",
-#     subtitle = "Strategia gamma-band hedging dla europejskiej opcji call na WIG20, przy stałym paśmie gammy",
-#     x = "Końcowy P&L",
-#     y = "Liczność"
-#   ) +
-#   theme_minimal(base_size = 13) +
-#   theme(
-#     plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
-#     plot.subtitle = element_text(hjust = 0.5, color = "gray30", size = 12),
-#     strip.text = element_text(face = "bold", size = 11, lineheight = 1.1),
-#     panel.grid.minor = element_blank(),
-#     panel.grid.major.x = element_line(color = "gray85", linewidth = 0.3),
-#     panel.grid.major.y = element_line(color = "gray88", linewidth = 0.3),
-#     panel.spacing = unit(1.2, "lines")
-#   )
-
-bands_delta <- c(0.001, 0.002, 0.005, 0.01, 0,05, 0.5)
+bands_delta <- c(0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.1, 0.5)
 band_gamma_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3551,8 +3474,8 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r bands_gamma, cache=TRUE, echo=FALSE, fig.width=10, fig.height=6}
 
-bands_gamma <- c(0.05, 0.25, 0.5, 0.75, 1, 1.5)
-band_delta_fixed <- 0.005
+bands_gamma <- c(0.00005, 0.00025, 0.0005, 0.00075, 0.001, 0.01, 0.1, 0.5)
+band_delta_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
 
@@ -3651,7 +3574,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 ```{r, echo=FALSE, cache=TRUE, fig.height=14, fig.width=11, warning=FALSE}
 
 delta_values <- seq(0.001, 0.01, by = 0.001)
-gamma_values <- seq(0.0, 6.0, by = 0.6)
+gamma_values <- seq(0.00005, 0.0005, by = 0.00005)
 
 mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
                       dimnames = list(gamma_values, delta_values))
@@ -3659,7 +3582,7 @@ mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_value
 sd_matrix   <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
                       dimnames = list(gamma_values, delta_values))
 
-S_paths_optim <- S_paths[1:300, , drop = FALSE]   
+S_paths_optim <- S_paths[1:50, , drop = FALSE]   
 
 
 for (d in seq_along(delta_values)) {
@@ -3752,8 +3675,6 @@ sds_plot <- ggplot(df_sds, aes(Var1, Var2, fill = value)) +
 means_plot / sds_plot
 
 ```
-
-
 
 ### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
