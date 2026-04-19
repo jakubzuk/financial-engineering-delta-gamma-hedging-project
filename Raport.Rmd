@@ -3580,7 +3580,7 @@ mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_value
 sd_matrix   <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
                       dimnames = list(gamma_values, delta_values))
 
-S_paths_optim <- S_paths[1:50, , drop = FALSE]   
+S_paths_optim <- S_paths[1:1000, , drop = FALSE]   
 
 
 for (d in seq_along(delta_values)) {
