@@ -34,7 +34,7 @@ library(reshape2)
 
 # Wprowadzenie
 
-Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w ramach przedmiotu "Inżynieria finansowa 1". Projekt będzie obracał się w tematyce zabezpieczania opcji waniliowych i składał się z trzech części: 0 (rozgrzewkowa), A oraz B. W części 0 będziemy precyzować niezbędne parametry potrzebne w dalszych częściach (m.in. parametry modelu Blacka-Scholesa), takie jak trajektorie ruchu Browna czy symulacje na podstawie Bootstrapingu. Druga część, tj. część A, będzie opisywała działanie delta hedgingu pojdeynczej opcji na WIG20, gdzie będziemy badać skuteczność naszych naszych parametrów, a w ostatniej części, tj. części B, rozważymy zabezpieczanie poprzez tzw. delta hedging.
+Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w ramach przedmiotu "Inżynieria finansowa 1". Projekt będzie obracał się w tematyce zabezpieczania opcji waniliowych i składał się z trzech części: 0 (rozgrzewkowa), A oraz B. W części 0 będziemy precyzować niezbędne parametry potrzebne w dalszych częściach (m.in. parametry modelu Blacka-Scholesa), takie jak trajektorie ruchu Browna czy symulacje na podstawie Bootstrapingu. Druga część, tj. część A, będzie opisywała działanie delta hedgingu pojdeynczej opcji na WIG20, gdzie będziemy badać skuteczność naszych naszych parametrów, a w ostatniej części, tj. części B, rozważymy zabezpieczanie poprzez tzw. gamma hedging.
 
 \newpage
 
@@ -125,7 +125,7 @@ rownames(drift_vol_estimates) <- c("mu", "sigma")
 
 Porównując otrzymane wartości z wcześniej omawianym wykresem notowań indeksu WIG20 łatwo zauważyć skąd się bierze ich zmiana, a w szczególności spadek wartości estymatora $\mu$ wraz z wydłużaniem okresu estymacji - biorąc zwroty z kolejnych lat przed 2021 rokiem, uwzględniamy okres, w którym nie tylko miał miejsce duży spadek wartości indeksu w ogóle (pandemia COVID-19), ale również trend zmian indeksu był negatywny (okres przed 2020).
 
-Przejdźmy teraz do analizy rozkładu dziennych zwrotów wartości indeksu. Przypomnijmy, że zgodnie z m.in. modelem Blacka-Scholesa owe zwroty powinny mieć rozkład normalny. ABy zweryfikować te tezę przeanalizujmy histogramy (wraz z dopasowanymi krzywymi gęstości odpowiednio sparametryzowanych rozkładów normalnych) oraz przeprowadźmy standardowy test zgodności Shapiro-Wilka. Analogicznie jak w przypadku estymacji dryfu i zmienności, rozważymy zwroty z czterech różnych okresów.
+Przejdźmy teraz do analizy rozkładu dziennych zwrotów wartości indeksu. Przypomnijmy, że zgodnie z m.in. modelem Blacka-Scholesa owe zwroty powinny mieć rozkład normalny. Aby zweryfikować te tezę przeanalizujmy histogramy (wraz z dopasowanymi krzywymi gęstości odpowiednio sparametryzowanych rozkładów normalnych) oraz przeprowadźmy standardowy test zgodności Shapiro-Wilka. Analogicznie jak w przypadku estymacji dryfu i zmienności, rozważymy zwroty z czterech różnych okresów.
 
 ```{r, echo=FALSE, cache = TRUE, fig.width=6, fig.height=5, fig.align='center'}
 dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
@@ -526,7 +526,7 @@ hist1 <- ggplot() +
                  bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
   geom_line(data = p_norm_hist, aes(x = x, y = y), color = "#2D3436", linewidth = 1.5) +
   coord_cartesian(xlim = c(-0.05, 0.05), ylim = c(0, 50)) +
-  labs(title = "Zwroty historyczne WIG20", subtitle = "Okres: 2021", 
+  labs(title = "Zwroty historyczne WIG20", subtitle = "Okres: 2022", 
        x = "Zwrot", y = "Gęstość") +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(size = 12, face = "bold", color = "#C92A2A", hjust = 0.5),
@@ -647,7 +647,7 @@ qq3 <- ggplot(data.frame(x = boot_returns_sample), aes(sample = x)) +
 qq1 | qq2 | qq3
 ```
 
-Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego. Zauważmy jeszcze na koniec, że uzyskana normalność symulowanych notowań jest w pewnym sensie oczekiwana - w poprzednim rozdziale zweryfikowaliśmy normalność rozkładu zwortów z roku $2021$, a zwroty symulowanych notowań, które teraz badaliśmy, są bezpośrednio powiązane właśnie z tymi zwrotami historycznymi.
+Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego. Zauważmy jeszcze na koniec, że uzyskana normalność symulowanych notowań jest w pewnym sensie oczekiwana - w poprzednim rozdziale zweryfikowaliśmy normalność rozkładu zwrotów z roku $2021$, a zwroty symulowanych notowań, które teraz badaliśmy, są bezpośrednio powiązane właśnie z tymi zwrotami historycznymi.
 
 ### Symulacje notowań indeksu WIG20 na okres 2022-2023
 
@@ -1281,7 +1281,7 @@ Z wykresu trajektorii możemy wyciągnąć wnioski, iż jest to do pewnego stopn
 
 ## Opcje na WIG20
 
-Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrumentami pochodnymi, w tym europejskimi, waniliowymi opcjami CALL i PUT na indeks WIG20. Inastrumenty te charakteryzują się następującymi własnościami:
+Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrumentami pochodnymi, w tym europejskimi, waniliowymi opcjami CALL i PUT na indeks WIG20. Instrumenty te charakteryzują się następującymi własnościami:
 
 * 6 możliwości wyboru miesiąca wygaśnięcia: 3 najbliższe miesiące kalendarzowe + 3 kolejne miesiące
 z marcowego cyklu kwartalnego (marzec, czerwiec,
@@ -1297,7 +1297,7 @@ GPW określa ryzyko handlu opcjami na najwyższym możliwym poziomie, głównie 
 
 Opcje europejskie CALL to instrumenty pochodne dające inwestorowi w pozycji długiej prawo odkupienia instrumentu bazowego od inwestora w pozycji krótkiej po ustalonej przed zawarciem transakcji cenie strike. Poniżej znajduje się wykres zysku dla pozycji długiej przykładowej opcji CALL:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.width=7, fig.height=5}
 # Parametry
 K <- 100      # strike
 premia <- 10  # koszt zakupu opcji
@@ -1356,7 +1356,7 @@ ggplot(df, aes(x = S, y = Zysk)) +
 
 Z kolei opcje europejskie PUT dają inwestorowi w pozycji długiej prawo sprzedaży instrumentu bazowego inwestorowi w pozycji krótkiej po ustalonej przed zawarciem transakcji cenie strike. Poniżej znajduje się wykres zysku dla pozycji długiej przykładowej opcji PUT:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.width=7, fig.height=5}
 # Parametry
 K <- 100      # strike
 premia <- 10  # koszt zakupu opcji
@@ -1430,7 +1430,7 @@ $$\text{Payoff} = \max{(K - S(T), 0)}$$
 
 (KID, standard - STRONA GPW https://www.gpw.pl/standardy-warunki-obrotu)
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.width=12, fig.height=6}
 
 # Parametry
 K <- 100  # strike
@@ -2478,11 +2478,11 @@ for (i in 1:20) {
                      bins = 30, fill = "#FF6B6B", color = "#C92A2A", alpha = 0.8) +
       labs(title = bquote(sigma['W'] ~ '=' ~ .(title_details[[i]][1]) ~ ',' ~ sigma['R'] ~ '=' ~ .(title_details[[i]][2]) ~ ',' ~ 'K = ' ~ .(title_details[[i]][3])), 
            x  = paste('Odch. std. = ', round(sd(risk_histograms_call_data[[i]][[1]]), 2), '\n Srednia = ', round(mean(risk_histograms_call_data[[i]][[1]]), 2)), y = "") +
-      theme_minimal(base_size = 11) +
+      theme_minimal(base_size = 16) +
       coord_cartesian(xlim = limits[[i]]) +
-      theme(plot.title = element_text(size = 7, face = "bold", color = "#C92A2A", hjust = 0.5),
-            plot.subtitle = element_text(size = 1, color = "gray50", hjust = 0.5),
-            axis.title.x = element_text(size = 7),
+      theme(plot.title = element_text(size = 16, face = "bold", color = "#C92A2A", hjust = 0.5),
+            plot.subtitle = element_text(size = 16, color = "gray50", hjust = 0.5),
+            axis.title.x = element_text(size = 16),
             axis.text.y = element_blank(),
             axis.ticks.y = element_blank(),
             axis.title.y = element_blank()
@@ -2491,15 +2491,37 @@ for (i in 1:20) {
 }
 ```
 
-```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=8, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+```{r red_hist_1, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
 ##########
-(risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) /
-(risk_hists_list[[5]] | risk_hists_list[[6]] | risk_hists_list[[7]] | risk_hists_list[[8]]) /
-(risk_hists_list[[9]] | risk_hists_list[[10]] | risk_hists_list[[11]] | risk_hists_list[[12]]) /
-  (risk_hists_list[[13]] | risk_hists_list[[14]] | risk_hists_list[[15]] | risk_hists_list[[16]]) /
-  (risk_hists_list[[17]] | risk_hists_list[[18]] | risk_hists_list[[19]] | risk_hists_list[[20]]) 
-
+(risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) 
 ```
+
+```{r red_hist_2, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##########
+(risk_hists_list[[1]] | risk_hists_list[[2]] | risk_hists_list[[3]] | risk_hists_list[[4]]) 
+```
+
+```{r red_hist_3, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##########
+(risk_hists_list[[5]] | risk_hists_list[[6]] | risk_hists_list[[7]] | risk_hists_list[[8]])
+```
+
+```{r red_hist_4, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##########
+(risk_hists_list[[9]] | risk_hists_list[[10]] | risk_hists_list[[11]] | risk_hists_list[[12]])
+```
+
+```{r red_hist_5, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##########
+(risk_hists_list[[13]] | risk_hists_list[[14]] | risk_hists_list[[15]] | risk_hists_list[[16]])
+```
+
+
+```{r , echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+##########
+(risk_hists_list[[17]] | risk_hists_list[[18]] | risk_hists_list[[19]] | risk_hists_list[[20]]) 
+```
+
 
 Rozpocznijmy analizę powyższych wykresów od skupienia się na pewnej ustalonej wartości ceny wykonania (tj. na pewnej pojedynczej kolumnie wykresów) aby skupić się na wpływie różnicy w przyjętych zmiennościach. Jak mogliśmy się spodziewać, strategia zabezpieczająca zwraca najlepsze rezultaty, gdy poziomy zmienności są sobie równe - wtedy odchylenie standardowe jest najmniejsze. Ciekawa sytuacja występuje w przypadku przeszacowania zmienności rynkowej, tj. wtedy kiedy zachodzi $\sigma_R < \sigma_W$, bowiem wówczas średnia jest dodatnia, więc teoretycznie średnio 'zarabiamy' podczas zabezpieczania (mówienie w tej sytuacji o zarabianiu nie jest do końca adekwatne, ponieważ bez uwzględnienia kosztów transakcyjnych jest to dość nierealistyczny scenariusz). Sytuacja znacznie bardziej komplikuje się w przypadku, gdy niedoszacowujemy zmienności, tj. wtedy gdy $\sigma_R > \sigma_W$. Dla każdej z rozważanych cen wykonania, wraz ze wzrostem różnicy między przyjętą zmiennością w portfelu, a zmiennością rynkową obserwujemy zarówno wzrost odchylenia standardowego jak i spadku (poniżej zera) średniej. Nie są to również zmiany niewielkie, bowiem przy wzroście różnicy między poziomami zmienności z 0 do 0.05 oraz z 0.05 do 0.1 wartości odchyleń standardowych stają się w przybliżeniu dwa razy większe. Na podstawie tych obserwacji jesteśmy w stanie wywnioskować, że rozważany przez nas portfel zabezpieczający charakteryzuje się istotnym stopniem czułości na przyjmowany poziom zmienności w stosunku do tego obowiązującego na rynku.
 
@@ -2586,7 +2608,7 @@ for (i in 1:4) {
   sh[[i]] <- min(ds[[i]]) - min(cs[[i]]) * sf[[i]]
 }
 
-text_size = 7
+text_size = 12
 
 for (i in 1:4) {
 
@@ -2668,13 +2690,13 @@ for (i in 1:4) {
 }
 ```
 
-```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+```{r, echo=FALSE, cache=TRUE, fig.width=12, fig.height=4, fig.align='center', fig.retina=1, dev="cairo_pdf"}
 ##
 (call_plots[[1]][[1]] | call_plots[[1]][[2]] | call_plots[[1]][[3]])  #/ 
 #  (call_plots[[2]][[1]] | call_plots[[2]][[2]] | call_plots[[2]][[3]])
 ```
 
-```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
+```{r, echo=FALSE, cache=TRUE, fig.width=14, fig.height=6, fig.align='center', fig.retina=1, dev="cairo_pdf"}
 ##
 #(put_plots[[1]][[1]] | put_plots[[1]][[2]] | put_plots[[1]][[3]]) / 
 #  (put_plots[[2]][[1]] | put_plots[[2]][[2]] | put_plots[[2]][[3]])
@@ -3126,7 +3148,7 @@ Głównymi parametrami strategii są $\text{band}_{\Delta}$ (tolerancja na zmian
 
 Do hedgowania użyjemy opcji binarnych o strike takim samym co zabezpieczana opcja call.
 
-## Analiza strategii 2.
+### Analiza strategii 2.
 
 ```{r band_gamma, echo=FALSE, cache=TRUE}
 
@@ -3562,7 +3584,170 @@ means_plot / sds_plot
 
 Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
 
-### Strategia 3: Binary Strangle Delta-Gamma-Hedging
+```{r, echo=FALSE, cache=TRUE}
+
+gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, 
+                             band_delta, band_gamma, K_binary = NULL) {
+  
+  if (is.null(K_binary)) K_binary <- K * exp(r * T)   # domyślnie forward
+  
+  n <- nrow(S_paths)
+  m <- ncol(S_paths)
+  dt <- T / (m - 1)
+  
+  PnL <- matrix(0, n, m)
+  rehedges <- numeric(n)
+  
+  for (i in 1:n) {
+    S <- S_paths[i, ]
+    V <- call_price(S[1], K, r, sigma, T)
+    
+    # Początkowy hedge
+    tau0 <- T
+    delta1 <- call_delta(S[1], K, r, sigma, tau0)
+    gamma1 <- call_gamma(S[1], K, r, sigma, tau0)
+    delta2 <- binary_call_delta(S[1], K_binary, r, sigma, tau0)
+    gamma2 <- binary_call_gamma(S[1], K_binary, r, sigma, tau0)
+    
+    if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
+    
+    beta <- -gamma1 / gamma2
+    beta <- beta / (1 + abs(beta) / 30)
+    alpha <- -(delta1 + beta * delta2)
+    
+    C2_0 <- binary_call_price(S[1], K_binary, r, sigma, tau0)
+    initial_cost <- cost_rate * (abs(alpha) * S[1] + abs(beta) * C2_0)
+    V <- V - initial_cost
+    
+    phi_prev <- alpha
+    w_prev   <- beta
+    rehedge_count <- 1
+    
+    for (t in 1:(m - 1)) {
+      tau <- max(T - (t - 1) * dt, dt)
+      
+      C2_t <- binary_call_price(S[t], K_binary, r, sigma, tau)
+      
+      if (t == (m - 1)) {
+        C1_next <- max(S[t + 1] - K, 0)
+        C2_next <- ifelse(S[t + 1] > K, 1, 0)
+      } else {
+        C1_next <- call_price(S[t + 1], K, r, sigma, tau - dt)
+        C2_next <- binary_call_price(S[t + 1], K_binary, r, sigma, tau - dt)
+      }
+      
+      delta1 <- call_delta(S[t], K, r, sigma, tau)
+      gamma1 <- call_gamma(S[t], K, r, sigma, tau)
+      delta2 <- binary_call_delta(S[t], K_binary, r, sigma, tau)
+      gamma2 <- binary_call_gamma(S[t], K_binary, r, sigma, tau)
+      
+      if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
+      
+      w_target <- -gamma1 / gamma2
+      w_target <- w_target / (1 + abs(w_target) / 30)
+      
+      portfolio_delta <- phi_prev + delta1 + w_prev * delta2
+      portfolio_gamma <- gamma1 + w_prev * gamma2
+      
+      if (abs(portfolio_delta) > band_delta || abs(portfolio_gamma) > band_gamma) {
+        phi <- -(delta1 + w_target * delta2)
+        w <- w_target
+        rehedge_count <- rehedge_count + 1
+      } else {
+        phi <- phi_prev
+        w <- w_prev
+      }
+      
+      cost <- cost_rate * (
+        abs(phi - phi_prev) * S[t] +
+        abs(w - w_prev) * C2_t
+      )
+      
+      V <- V + phi*(S[t+1]-S[t]) + w*(C2_next - C2_t) + r*V*dt - cost
+      PnL[i, t + 1] <- V - C1_next
+      
+      phi_prev <- phi
+      w_prev <- w
+    }
+    rehedges[i] <- rehedge_count
+  }
+  
+  return(list(PnL = PnL, rehedges = rehedges))
+}
+
+```
+
+```{r, echo=FALSE, cache=TRUE, fig.height=14, fig.width=11, warning=FALSE}
+
+# =============================================================================
+# HISTOGRAMY - Stałe band_gamma, zmienne band_delta i K_binary
+# =============================================================================
+
+band_delta_values <- c(0.001, 0.005, 0.01)
+band_gamma_fixed  <- 1
+K_binary_values   <- c(1200, 1500, K, 1900, 2200)   # trzy różne strike binarne
+
+S_paths <- S_paths[1:1000, , drop = FALSE]
+band_results_list <- list()
+counter <- 1
+
+for (bd in band_delta_values) {
+  for (kb in K_binary_values) {
+    
+    res <- gamma_band_hedge(
+      S_paths    = S_paths,
+      K          = K,
+      r          = r,
+      sigma      = sigma_est,
+      T          = T,
+      cost_rate  = koszty,
+      band_delta = bd,
+      band_gamma = band_gamma_fixed,
+      K_binary   = kb
+    )
+    
+    final_PnL <- res$PnL[, ncol(res$PnL)]
+    rehedges  <- res$rehedges
+    
+    label_text <- paste0(
+      "band_delta = ", bd,
+      "\nband_gamma = ", band_gamma_fixed,
+      "\nK_binary = ", round(kb, 0),
+      "\nŚr: ", round(mean(final_PnL),1),
+      " | SD: ", round(sd(final_PnL),1),
+      "\nReh: ", round(mean(rehedges),1)
+    )
+    
+    band_results_list[[counter]] <- data.frame(
+      PnL = final_PnL,
+      label = label_text
+    )
+    counter <- counter + 1
+  }
+}
+
+plot_df <- bind_rows(band_results_list)
+
+ggplot(plot_df, aes(x = PnL)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 70, fill = "steelblue", alpha = 0.75) +
+  geom_vline(xintercept = 0, color = "red", linetype = "dashed", linewidth = 0.9) +
+  facet_wrap(~ label, ncol = 3, scales = "fixed") +
+  labs(
+    title = "Histogramy PnL przy stałym band_gamma = 0.00005",
+    subtitle = "Zmienne band_delta i strike opcji binarnej (K_binary)",
+    x = "PnL końcowy",
+    y = "Gęstość"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 9, lineheight = 1.1),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5)
+  )
+
+```
+
+## Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
 W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Postać poortfela replikującego wygląda następująco:
 $$
@@ -3879,7 +4064,7 @@ sds_plot
 
 Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają średnią bliską zera oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy dojść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.06, 0.065\}$ oraz $K^* \in \{600, 650, 700\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedgingu. Gdy jednak spojrzy się na proces rozwoju składu portfela konkretnych realizacji tej strategii, można zauważyć, że wartości opcji binarnych odgrywają tam ważną rolę (dodatkowo, jak zobaczymy później, w pewnych realiach rynkowych strategie te będą się zauważalnie różnić). 
 
-#### Analiza strategii 3.  
+### Analiza strategii 3.  
 
 \leavevmode\par
 
