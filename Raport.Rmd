@@ -1626,7 +1626,7 @@ Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, 
 
 Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
 
-Przy naszych założeniach okazuje się, że rozumowanie i wyniki dla europejskich opcji call i put są dokładnie takie same. Dowód tego faktu znajduje się w dodatku na końcu raportu. W związku z tym ograniczymy się do omawiania wyników dla opcji call.
+Przy naszych założeniach okazuje się, że rozumowanie i wyniki dla europejskich opcji call i put są dokładnie takie same. Dowód tego faktu znajduje się w dodatku na końcu raportu. W związku z tym w niektórych miejscach ograniczymy się do omawiania wyników jedynie dla opcji call.
 
 ## Analiza wpływu częstotliwości re-hedgingu
 
@@ -1876,7 +1876,9 @@ Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwo�
 
 ### Rehedging a strike 
 
-#### Opcja CALL
+Częstotliwość rehedgingu nie jest jedynym parametrem, który nas interesuje. Hedgować możemy opcje o różnych cenach strike i przyjmować model o różnych zmiennościach. Przyjrzyjmy się jak to wpływa na rozkład błędów hedgingowych.
+
+<!-- #### Opcja CALL -->
 
 ```{r sensitivity_table_strike_sigma_call, echo=FALSE, cache=TRUE, results='asis'}
 
@@ -1980,111 +1982,113 @@ kable(
 
 
 
-#### Opcja PUT
+<!-- #### Opcja PUT -->
 
 ```{r sensitivity_table_strike_sigma_put, echo=FALSE, cache=TRUE, results='asis'}
 
-option_type_analysis <- "P"   
-M_table <- 2000
-
-rehedge_counts <- c(250, 125, 63, 35, 12)
-
-
-fixed_sigma <- 0.20
-strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
-#c(1500, 1600, 1700, 1800, 1900, 2000)
-strike_grid <- expand.grid(
-  strike = strike_values,
-  rehedges = rehedge_counts
-) %>%
-  as_tibble()
-
-strike_table <- strike_grid %>%
-  mutate(
-    errors = pmap(
-      list(strike, rehedges),
-      function(strike, rehedges) {
-        BS_delta_hedging_algorithm(
-          S0 = S0,
-          mu = mu,
-          sigma = fixed_sigma,
-          r = r,
-          t = t,
-          n = rehedges,
-          m = M_table,
-          K = strike,
-          option_premium = NA,
-          real_prices = NA,
-          option_type = option_type_analysis
-        )[[1]]
-      }
-    ),
-    sd_error = map_dbl(errors, sd)
-  ) %>%
-  select(strike, rehedges, sd_error) %>%
-  mutate(sd_error = round(sd_error, 2)) %>%
-  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
-  arrange(strike)
-
-cat("#### Wpływ ceny wykonania przy ustalonej zmienności\n\n")
-cat(paste0("Przyjęto zmienność $\\sigma = ", fixed_sigma, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
-
-kable(
-  strike_table,
-  col.names = c("Strike", "250", "125", "63", "35", "12"),
-  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych wartości strike (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
-)
-
-cat("\n\n")
-
-
-fixed_strike <- 1800
-sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.30)
-
-sigma_grid <- expand.grid(
-  sigma = sigma_values,
-  rehedges = rehedge_counts
-) %>%
-  as_tibble()
-
-sigma_table <- sigma_grid %>%
-  mutate(
-    errors = pmap(
-      list(sigma, rehedges),
-      function(sigma, rehedges) {
-        BS_delta_hedging_algorithm(
-          S0 = S0,
-          mu = mu,
-          sigma = sigma,
-          r = r,
-          t = t,
-          n = rehedges,
-          m = M_table,
-          K = fixed_strike,
-          option_premium = NA,
-          real_prices = NA,
-          option_type = option_type_analysis
-        )[[1]]
-      }
-    ),
-    sd_error = map_dbl(errors, sd)
-  ) %>%
-  select(sigma, rehedges, sd_error) %>%
-  mutate(sd_error = round(sd_error, 2)) %>%
-  pivot_wider(names_from = rehedges, values_from = sd_error) %>%
-  arrange(sigma)
-
-cat("#### Wpływ zmienności przy ustalonej cenie wykonania\n\n")
-cat(paste0("Przyjęto cenę wykonania $K = ", fixed_strike, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
-
-kable(
-  sigma_table,
-  col.names = c("Zmienność", "250", "125", "63", "35", "12"),
-  caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych poziomów zmienności (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
-)
+# option_type_analysis <- "P"   
+# M_table <- 2000
+# 
+# rehedge_counts <- c(250, 125, 63, 35, 12)
+# 
+# 
+# fixed_sigma <- 0.20
+# strike_values <- c(1000, 1500, 2000, 2500, 3000, 3500)
+# #c(1500, 1600, 1700, 1800, 1900, 2000)
+# strike_grid <- expand.grid(
+#   strike = strike_values,
+#   rehedges = rehedge_counts
+# ) %>%
+#   as_tibble()
+# 
+# strike_table <- strike_grid %>%
+#   mutate(
+#     errors = pmap(
+#       list(strike, rehedges),
+#       function(strike, rehedges) {
+#         BS_delta_hedging_algorithm(
+#           S0 = S0,
+#           mu = mu,
+#           sigma = fixed_sigma,
+#           r = r,
+#           t = t,
+#           n = rehedges,
+#           m = M_table,
+#           K = strike,
+#           option_premium = NA,
+#           real_prices = NA,
+#           option_type = option_type_analysis
+#         )[[1]]
+#       }
+#     ),
+#     sd_error = map_dbl(errors, sd)
+#   ) %>%
+#   select(strike, rehedges, sd_error) %>%
+#   mutate(sd_error = round(sd_error, 2)) %>%
+#   pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+#   arrange(strike)
+# 
+# cat("#### Wpływ ceny wykonania przy ustalonej zmienności\n\n")
+# cat(paste0("Przyjęto zmienność $\\sigma = ", fixed_sigma, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+# 
+# kable(
+#   strike_table,
+#   col.names = c("Strike", "250", "125", "63", "35", "12"),
+#   caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych wartości strike (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+# )
+# 
+# cat("\n\n")
+# 
+# 
+# fixed_strike <- 1800
+# sigma_values <- c(0.10, 0.15, 0.20, 0.25, 0.30)
+# 
+# sigma_grid <- expand.grid(
+#   sigma = sigma_values,
+#   rehedges = rehedge_counts
+# ) %>%
+#   as_tibble()
+# 
+# sigma_table <- sigma_grid %>%
+#   mutate(
+#     errors = pmap(
+#       list(sigma, rehedges),
+#       function(sigma, rehedges) {
+#         BS_delta_hedging_algorithm(
+#           S0 = S0,
+#           mu = mu,
+#           sigma = sigma,
+#           r = r,
+#           t = t,
+#           n = rehedges,
+#           m = M_table,
+#           K = fixed_strike,
+#           option_premium = NA,
+#           real_prices = NA,
+#           option_type = option_type_analysis
+#         )[[1]]
+#       }
+#     ),
+#     sd_error = map_dbl(errors, sd)
+#   ) %>%
+#   select(sigma, rehedges, sd_error) %>%
+#   mutate(sd_error = round(sd_error, 2)) %>%
+#   pivot_wider(names_from = rehedges, values_from = sd_error) %>%
+#   arrange(sigma)
+# 
+# cat("#### Wpływ zmienności przy ustalonej cenie wykonania\n\n")
+# cat(paste0("Przyjęto cenę wykonania $K = ", fixed_strike, "$. W tabeli podano odchylenie standardowe błędu hedgingowego.\n\n"))
+# 
+# kable(
+#   sigma_table,
+#   col.names = c("Zmienność", "250", "125", "63", "35", "12"),
+#   caption = paste("Odchylenie standardowe błędu hedgingowego dla różnych poziomów zmienności (opcja", ifelse(option_type_analysis == "P", "PUT", "CALL"), ")")
+# )
 ```
 
-Jak widać z powyższych tabel, wzrost zmienności wpływa na rozkład wartości błędu hedgingowego podobnie jak wzrost ceny wykonania opcji do pewnego momentu. WYższe ceny strike znów powodują zwężenie histogramów i redukcję odchylenia standardowego błędów. Tutaj także różnice między opcją CALL i PUT są marginalne. Z dosyć dobrą dokładnością rozkłady dla obydwu typów opcji są jednakowe.  
+Jak widać z powyższych tabel, wzrost zmienności wpływa na rozkład wartości błędu hedgingowego. Okazuje się, że zgodnie z intuicją większa zmienność wiąże się z większą liczbą istotnie odstających błędów hedgingowych, podczas gdy mniejsza zmienność skutkuje zbliżeniem się do rozkładu ciągłego.
+
+Wzrost ceny wykonania opcji do pewnego momentu powoduje zwiększanie odchylenia standardowego w rozkładzie błędów hedgingowych, lecz wyższe ceny strike znów powodują zwężenie histogramów i redukcję odchylenia standardowego błędów. Punkt przegięcia znajduje się blisko mediany wartości indeksu.   
 
 
 ```{r quantiles_rehedging_delta, echo=FALSE, cache=TRUE}
@@ -2283,11 +2287,11 @@ p_put <- ggplot(filter(quantiles_long, option == "PUT"),
 
 Zgodnie z przewidywaniami linie kwantylowe odległe od siebie dla rzadkiego rehedgingu, zbiegają do mediany dla hedgingu częstego. Ponownie gdybyśmy rozważyli granicę rehedgingu ciągłego, dostalibyśmy linie kwantylowe nakłądające się na siebie. Na powyższych wykresach, zwłaszcza dla opcji PUT, widać cięzkie ogony, które rozciągają skrajne krzywe kwantylowe mocno w kierunku wartości skrajnych. Mediana niezależnie od częstotliwości hedgowania jest bliska zeru i wraz ze zwiększaniem częstotliwości, zbiega bliżej zera. Ta obserwacja pokrywa się z wnioskiem o dążeniu histogramów do miary Diraca w zerze wraz ze zwiększaneim częstotliwości, więc jest to spójne z poprzednimi obserwacjami.
 
-### Kiedy wystarczająco dobrze? (moje nagłówki serio do zmiany...)
+### Jak często jest wystarczająco często?
 
 Jak widać w powyższej analizie, chcielibyśmy rehedgować jak najczęściej, wtedy całkowicie uodparniamy się na losowość zmian aktywa. W rzeczywistości jednak, ciągły rehedging jest niemożliwy a sama operacja rehedgingu wiąże się z kosztami. Dobrym rozwiązaniem byłoby więc znalezienie takiej częstotliwości rehedgingu, która jest jak najrzadsza zapewniając przy tym wystarczająco dobre rezultaty (odpowiednio niskie odchylenia).
 
-Rozważymy kilka wartości tolerowanego błędu hedgingowego. Żądamy, żeby z $95\%$ (WPISANE Z PALCA, MOŻE NIEWŁAŚCIWA WARTOŚĆ?) prawdopodobieństwem nasza faktyczna różnica była co do modułu mniejsza niż ustalona granica tolerancji. Innymi słowy dla granicy tolerancji $\varepsilon$ i błędu hedgingowego $e$ żądamy:
+Rozważymy kilka wartości tolerowanego błędu hedgingowego. Żądamy, żeby z $95\%$ prawdopodobieństwem nasza faktyczna różnica była co do modułu mniejsza niż ustalona granica tolerancji. Innymi słowy dla granicy tolerancji $\varepsilon$ i błędu hedgingowego $e$ żądamy:
 
 $$ \mathbb{P}[|e| \leq \varepsilon] \geq 0.95 $$
 
@@ -3375,7 +3379,7 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=10, fig.height=6}
 
-bands_delta <- c(0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.1, 0.5)
+bands_delta <- c(0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01)
 band_gamma_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3475,7 +3479,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r bands_gamma, cache=TRUE, echo=FALSE, fig.width=10, fig.height=6}
 
-bands_gamma <- c(0.00005, 0.00025, 0.0005, 0.00075, 0.001, 0.01, 0.1, 0.5)
+bands_gamma <- c(0.00005, 0.00025, 0.0005, 0.00075, 0.001, 0.01)
 band_delta_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3676,6 +3680,8 @@ sds_plot <- ggplot(df_sds, aes(Var1, Var2, fill = value)) +
 means_plot / sds_plot
 
 ```
+
+Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
 
 ### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
