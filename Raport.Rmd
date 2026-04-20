@@ -485,7 +485,7 @@ legend_plot_boot <- ggplot() +
 
 Analizując wykresy symulacji przeprowadzonych metodą bootstrapową dochodzimy do analogicznych wniosków jak w przypadku poprzednim - również w każdym z czterech przypadków końcowa wartość indeksu leży wyraźnie poniżej mediany (w przypadku pierwszego okresu, ponownie, nawet poniżej kwantyla pięcioprocentowego) i większość notowań oscyluje wokół krzywej kwantylowej pięcioprocentowej. Obserwacje dotyczące rozrzutu końcowych wartości symulowanych notowań są również podobne; w przypadku okresu pierwszego rozrzut jest najmniejszy, a w przypadku drugiego - największy.
 
-Przejdźmy teraz do analizy normalności zwrotów z roku 2022 oraz zwrotów wysymulowanych notowań (obiema metodami). Analogicznie jak w przypadku badania normalności w poprzednim podroziadziale
+Przejdźmy teraz do analizy normalności zwrotów z roku 2022 oraz zwrotów wysymulowanych notowań (obiema metodami). Analogicznie jak w przypadku badania normalności w poprzednim podroziadziale, skupimy się na wizualnej weryfikacji normalności histogramów oraz przeprowadzenia testów zgodności Shapiro-Wika. Dodatkowo, przyjrzymy się również wykresom kwantylowo-kwantylowym. Aby ograniczyć liczbę badanych przypadków, rozważymy zwroty symulowanych notowań powiązanych z okresem z roku $2021$ (tj. tych, dla których estymacja parametrów dryfu i zmienności oraz losowanie zwrotów do konstrukcji notowań związane jest ze zwrotami z roku $2021$).
 
 ```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 reset = 3
@@ -559,9 +559,7 @@ hist3 <- ggplot() +
 hist1 | hist2 | hist3
 ```
 
-Wstępna ocena histogramów wskazuje na gaussowskość rozkładu zarówno zwrotów historycznych, jak i symulowanych przy pomocy geometrycznego ruchu Browna. Ilustruje to krzywa gęstości rozkładu normalnego na wykresach, jednak aby móc wydać taki osąd potrzebujemy narzędzi statystycznych takich jak test Shapiro-Wilka czy wykresy kwantylowo-kwantylowe.
-
-$H_0$: Dane pochodzą z rozkładu normalnego \qquad $H_1$: Dane nie pochodzą z rozkładu normalnego
+Wstępna ocena histogramów wskazuje na normalność rozkładu zwrotów symulowanych zarówno metodą standardową jak i bootstrapową. Ilustruje to krzywa gęstości rozkładu normalnego na wykresach, jednak aby móc wydać taki osąd potrzebujemy narzędzi statystycznych takich jak test Shapiro-Wilka czy wykresy kwantylowo-kwantylowe.
 
 ```{r return_shapiro_2022, echo=FALSE, cache=TRUE}
 reset = 3
@@ -649,7 +647,7 @@ qq3 <- ggplot(data.frame(x = boot_returns_sample), aes(sample = x)) +
 qq1 | qq2 | qq3
 ```
 
-Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego .
+Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego. Zauważmy jeszcze na koniec, że uzyskana normalność symulowanych notowań jest w pewnym sensie oczekiwana - w poprzednim rozdziale zweryfikowaliśmy normalność rozkładu zwortów z roku $2021$, a zwroty symulowanych notowań, które teraz badaliśmy, są bezpośrednio powiązane właśnie z tymi zwrotami historycznymi.
 
 ### Symulacje notowań indeksu WIG20 na okres 2022-2023
 
@@ -882,6 +880,8 @@ legend_plot_boot <- ggplot() +
 
 Ponownie, wykresy symulacji przeprowadzonych metodą bootstrapową mają podobne własności do tych odpowiadających symulacjom przeprowadzonym metodą standardową; również w tym przypadku widzimy lepsze dopasowanie symulacji do faktycznych notowań niż w przypadku symulacji na sam rok 2022 - widzimy to obserwując rozmieszczenie faktycznych notowań względem krzywej mediany i krzywej kwantylowej pięcioprocentowej. Analogiczna jest też tendencja wzrostowa symulacji dla okresu pierwszego - widzimy wyraźną różnicę w nachyleniu mediany w porównaniu do pozostałych okresów.
 
+Analogicznie jak w przypadku symulacji notowań na rok 2022, przeanalizujemy teraz normalność zwrotów historycznych z okresu 2022-2023 oraz zwrotów z notowań symulowanych; ponownie, w celu ograniczenia przypadków przyjrzymy się jedynie notowaniom symulowanym powiązanym z okresem z roku 2021. Poniżej przedstawiamy uzyskane wykresy oraz wyniki testów Shapiro-Wilka wraz z ogólnym komentarzem dla całości rezultatów.
+
 ```{r return_histogram_2022_2023, echo=FALSE, fig.width=12, fig.height=4, cache=TRUE}
 reset = 2
 # Dane historyczne (2022-2023)
@@ -1039,11 +1039,7 @@ qq3 <- ggplot(data.frame(x = boot_returns_2y_sample), aes(sample = x)) +
 qq1 | qq2 | qq3
 ```
 
-Zgodnie z budową modelu, symulacja metodą GBM do predykcji dwuletniej ma log-zwroty o rozkładzie normalnym co nie jest jednak cechą pożądaną, gdyż dane historyczne znacząco odbiegają od tego modelu.
-
-Metoda symulacji bootstrapowa dla predykcji dwuletnich odbiega od rozkładu normalnego (chociaż mniej niż dane historyczne). Warto zwrócić uwagę, że rozbieżności względem prostej odpowiadającej rozkładowi normalnemu są symetryczne dla danych historycznych i bootstrapowych (przeszacowane dla wyższych kwantyli i niedoszacowane dla niższych). 
-
-W związku z tym, takie podejście do symulacji może skutkować lepszymi rezultatami, chociaż rzeczywiste dane cechują się dużo cięższymi ogonami niż oba warianty symulacyjne.
+Po analizie uzyskanych wykresów (zarówno histogramów jak i wykresów kwantylowo-kwantylowych) możemy dojść do wniosku, że zwroty notowań symulowanych metodą standardową wykazują wyraźną normalność, natomiast zwroty historyczne oraz zwroty związane z notowaniami symulowanymi metodą bootstrapową już niekoniecznie - widać to w szczególności w przypadku odchyleń od linii referencyjnej na wykresach kwantylowo-kwantylowych. Do podobnych konkluzji możemy dojść patrząc na wyniki testów zgodności - jedynie w przypadku zwrotów notowań symulowanych metodą standardową nie odrzucamy hipotezy zerowej o normalności rozkładu.
 
 ## Symulacje notowań indeksu WIG20 i akcji KGHM jako przykład dwóch skorelowanych aktywów
 
@@ -1112,13 +1108,9 @@ kable(results,
       caption = "Współczynniki korelacji zwrotów notowań indeksu WIG20 i notowań akcji KGHM (4 okresy)")
 ```
 
-(jakiś komentarz do tego może)
-Dodatnia korelacja w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
+Jak widzimy, dla rozważanych okresów wyestymowana korelacja jest ściśle dodatnia i w każdym z przypadków większa od 0.5. Odwołując się do własności współczynnika korelacji możemy zauważyć, że jej dodatnia wartość w przypadku notowań dwóch aktywów oznacza, że gdy notowania jednego z nich rosną, oczekujemy, że notowania drugiego również rosną; analogicznie w przypadku spadku notowań jednego z aktywów.
 
-Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
-
-
-Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacji notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
+Po wyznaczeniu wartości numerycznej korelacji, możemy przeprowadzić symulacje notowań obu notowań i analizując wykresy zweryfikować, czy korelacja jest dostrzegalna. Tak samo jak w przypadku symulacji notowań pojedynczego aktywa, korzystamy z metody standardowej oraz metody bootstrapowej, których szczegóły znajdują się w Dodatku. Poniżej przedstawiamy uzyskane wykresy; rozpoczynamy od symulacji uzyskanych metodą standardową.
 
 ```{r, echo=FALSE}
 # Funkcja zwracająca listę zawierającą dwie macierze, które zawierają wysymulowane
@@ -1169,7 +1161,6 @@ kghm_2021_zwroty <- kghm_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
 wigS0 = as.numeric(as.matrix(wig20_data %>% filter(year(Data) == 2021))[1, 2])
 kghmS0 = as.numeric(as.matrix(kghm_data %>% filter(year(Data) == 2021))[1, 2])
 ```
-
 
 ```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
 # Ten chunk zostawiam tylko, żeby zaobrazować, że te sposoby symulacji dają raczej dobre rezultaty;
@@ -1472,6 +1463,8 @@ plot_call | plot_put
 
 ### Histogram payoffów opcji zapadających w grudniu 2022
 
+Po teoretycznym wprowadzeniu opcji możemy je przeanalizować biorąc pod uwagę wysymulowane notowania z poprzednich podrozdziałów - patrząc na wartości wysymulowanych notowań w dniu zapadnięcia opcji możemy zbadać jak będziem wyglądał rozkład jej payoffu, w zależności od ceny wykonania. Poniżej przedstawiamy uzyskane wykresy w zależności od wspomnianej ceny wykonania opcji, zarówno dla opcji typu call jak i put (każdy z wykresów oparty jest o notowania wysymulowane metodą standardową ze zmiennością i dryfem estymowanymi z danych historycznych z roku 2021). Rozpoczyniemy od przypadku opcji typu call.
+
 ```{r, echo=FALSE}
 strikes <- c(1800, 1900, 2000, 2100, 2200, 2300)
 mnoznik <- 1
@@ -1541,7 +1534,7 @@ c6 <- plot_payoff_hist(ST_values, strikes[6], "CALL", x_limits, y_limits)
   )
 ```
 
-Wzrost ceny wykonania powoduje, że w chwili zapadalności coraz mniej opcji jest "w pieniądzu" co przekłada się na malejący średni payoff opcji. Dokładnie odwrotna zależność będzie zachodzić dla opcji put:
+Jak widzimy, dla rozważanych cen wykonania większość symulowanych notowań osiąga wartości końcowe, które sprawiają, że opcje są in-the-money, czyli posiadaczowi opłaca się je wykonać. Dla najniższej z przyjętych cen wykonania (1800) rozkład wykazuje pewien poziom symetrii wokół średniej (linia przerywana), jednakże wraz zewzrostem ceny wykonania obserwujemy zanik owej symetrii i wzrost silnej prawoskośności; w szczególności, dla ceny wykonania większych od 2000 moda rozkładu nie jest już wartością bliską średniej, ale występuje w okolicy zera.
 
 ```{r, echo=FALSE}
 strikes <- c(3000, 3100, 3200, 3300, 3400, 3500)
@@ -1604,7 +1597,7 @@ p6 <- plot_put_hist(ST_values, strikes[6], x_limits, y_limits)
   )
 ```
 
- 
+W przypadku powyższych wykresów, tj. tych odpowiadającym opcji typu put, możemy dojść do podobnych wniosków jak wcześniej, z tą różnicą, że teraz spadek ceny wykonania powiązany jest z efektami, które wcześniej wywoływał jej wzrost. Ponownie obserwujemy zmianę skośności rozkładu oraz wzrost pojawienie się mody w okolicy zera w zależności od zmian cen wykonania.
 
 \newpage
 
@@ -1614,11 +1607,11 @@ W tej części będziemy rozważać transakcje opcji call i put na indeks WIG20 
 
 ## Model i strategia zabezpieczająca
 
-Zakładamy, że spełnione są główne założenia i konsekwencje modelu Blacka-Scholesa - notowania indeksu WIG20 są pewną realizacją geometrycznego ruchu Browna, a interesującego nas instrumenty pochodne, tj. opcje, wycenione są zgodnie ze wzorami wynikającymi z owego modelu. W tym świecie, postać samofinansującego portfela, który replikuje payoff standardowej opcji waniliowej call na pewne aktywo $S$, wygląda następująco:
+Zakładamy, że spełnione są główne założenia i konsekwencje modelu Blacka-Scholesa - notowania indeksu WIG20 są pewną realizacją geometrycznego ruchu Browna, a interesujące nas instrumenty pochodne, czyli opcje, wycenione są zgodnie ze wzorami wynikającymi z owego modelu. Wobec tych założeń, postać samofinansującego portfela zabezpieczającego opcję waniliową call na pewne aktywo $S$ wygląda następująco:
 $$
 \Pi = \Delta S + B = \frac{\partial V}{\partial S} S + B
 $$
-gdzie $S$ w rozważanym przez nas przypadku jest indeksem WIG20, a $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$. Jest to oczywiście standardowa strategia delta-hedgingowa. Aktualizując taki portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
+gdzie $S$ w rozważanym przez nas przypadku jest indeksem WIG20, a $B$ jest ilością środków finansowych zainwestowanych bądź dłużnych zalokowanych z użyciem stopy wolnej od ryzyka $r$ (przyjmujemy, że owa stopa procentowa wynosi $0.05$). Jest to oczywiście standardowa strategia delta-hedgingowa. Aktualizując taki portfel w sposób ciągły mamy gwarancję dokładnej replikacji payoffu rozważanej opcji. Korzystając z tak skontruowanego portfela w rzeczywistych realiach tradingowych jesteśmy skazani na aktualizowanie pozycji długich i krótkich nie w sposób ciągły, ale dyskretny - możemy taką procedurę opisać w postaci następującego algorytmu:
 
 Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, ...,t_n$, $t_0 = 0$ oraz, że w każdej z tych chwil znamy wartość (oznaczaną przez $S_{t_i}$) indeksu WIG20. W chwili $t_0 = 0$ sprzedajemy jedną opcję o wartości $V_0$ (krótka pozycja) oraz kupujemy indeks WIG20 (długa pozycja) w ilości $\Delta_0 = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_0}$. Pozostałe środki finansowe, czyli $C_0 = V_0 - \Delta_0$ inwestujemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$ (w następnej chwili ich wartość wynosi więc $C_{t_1} = C_0e^{r(t_1 - t_0)}$). 
 
@@ -1626,9 +1619,11 @@ Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, 
 
 Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
 
-Przy naszych założeniach okazuje się, że rozumowanie i wyniki dla europejskich opcji call i put są dokładnie takie same. Dowód tego faktu znajduje się w dodatku na końcu raportu. W związku z tym w niektórych miejscach ograniczymy się do omawiania wyników jedynie dla opcji call.
+Przy naszych założeniach okazuje się, że rozumowanie i wyniki dla europejskich opcji call i put są dokładnie takie same. Dowód tego faktu znajduje się w dodatku na końcu raportu. W związku z tym, w dalszej części raportu ograniczymy się do omawiania wyników numerycznych jedynie dla opcji typu call.
 
 ## Analiza wpływu częstotliwości re-hedgingu
+
+Jak już wspomnieliśmy przy omawianiu postaci portfela zabezpieczającego, jego skuteczność jest powiązana z założeniem o jego ciągłym odswieżaniu, co jak już zauważyliśmy jest niemożliwe do spełnienia - jesteśmy zatem skazani na aktualizowanie portfela w ograniczonej liczbie chwil. Naturalnym podejściem (jak zobaczymy części B nie jedynym) jest dokonywanie tej aktualizacji w równie oddalonych momentach czasu (z góry ustalonych). Rozważmy zatem następujące 6 możliwości: rehedging codzienny (czylo około 250 rehedgingów w ciągu roku), rehedging co dwa dni (około 125 rehedgingów w ciągu roku), rehedging co cztery dni (około 63 rehedgingi w ciągu roku), rehedging tygodniowy (około 35 rehedgingów w ciągu roku), rehedging co miesiąc (12 rehedgingów w ciągu roku) oraz prawie statytyczny hedging (pojedynczy reheding w ciągu roku). Aby zbadać różnice między tymi strategiami przyjrzymy się ich realizacjom w przypadku zabezpieczania opcji call o cenie wykonania 1800, korzystając z wysymulowanych notowań indeksu WIG20 (przyjmując zmienność na poziomie $0.2$ oraz dryf na poziomie $0.1$). Analizując rozkład końcowej wartości portfela zabezpieczającego (czyli wartości posiadanego indeksu w chwili końcowej oraz zainwestowanej lub pożyczonej gotówki pomniejszonej o payoff opcji call) będziemy w stanie stwierdzić, jak zmiana częstotliwości rehedgingu wpływa na jego efektywność.
 
 ```{r, include = FALSE}
 #   Funkcja przeprowadzająca algorytm delta-hedgingowy
@@ -1872,7 +1867,7 @@ call_plot6 = ggplot() +
   )
 ```
 
-Zauważalna jest tendencja niezależna od typu opcji. Zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze. Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).  
+Jak widzimy, zwiększenie częstotliwości re-hedgingu powoduje koncentrację różnic w zerze i zmniejszenie odchylenia standardowego. Ogony stają się coraz lżejsze, by w modelu ciągłym dążyć do miary Diraca w zerze. Dodatkowo, rozkład różnic jest w dobrym przybliżeniu symetryczny względem zera, możliwe są zarówno nieduże straty jak i nieduże zyski z podobnym prawdopodobieństwem (przy założeniu naszego modelu).
 
 ### Rehedging a strike 
 
@@ -2381,6 +2376,10 @@ kable(
 
 Jak widać powyżej, dla osiągnięcia dostatecznie dobrych rezultatów wystarczy przeprowadzać rehedging dużo rzadziej niż każdego dnia. Ciekawym przypadkiem jest poziom tolerancji $\varepsilon = 10$. Niezależnie od częstotliwości hedgowania, nie jesteśmy w stanie osiągnąć żądanego wcześniej prawdopodobieństwa. Dla większych tolerancji jest to osiągane.
 
+## Analiza ryzyka błędnej zmienności
+
+W dotychczasowych przeprowadzonych analizach operowaliśmy przy wygodnym założeniu, że zarówno zmienność rynkowa (tj. ta odpowiadająca za zmienność symulowanych notowań) jak i zmienność przyjęta w portfelu zabezpieczającym (używana m.in. do obliczania liczby jednostek indeksu w portfelu, zgodnie z modelem Blacka-Scholesa) są sobie równe. W rzeczywistości jednak, te założenie niekoniecznie jest prawdziwe, a co równie ważne - jego spełnienie jest fundamentalnie nieweryfikowalne. Istnieje wiele metod umożliwiających estymację zmienności, ale żadna nie gwarantuje absolutnej skuteczności. Wobec tego, warto jest zbadać, jak zachowuje się rozważany przez nas portfel zabezpieczający w przypadku, gdy błędnie ocenimy zmienność. Aby dokonać takiej analizy ponownie zbadamy realizacje zabezpieczania opcji call (o różnych cenach wykonania, aby uwzględnić wpływ również tego parametru) korzystając z notowań wysymulowanych - tym razem jednak, notowania będziemy symulować korzystając z różnych poziomów zmienności rynkowej (oznaczanej przez $\sigma_R$) przyjmując dla każdego przypadku zmienność w portfelu zabezpieczającym na poziomie $0.2$ (tę zmienność oznaczamy przez $\sigma_W$). Analizując rozkład wartości końcowych portfela będziemy w stanie sprawdzić czy strategia jest efektywna w przypadku niedoszacowania zmienności ($\sigma_R > \sigma_W$) oraz w przypadku przeszacowania zmienności ($\sigma_R < \sigma_W$). Dla każdego z rozważanych przypadków algorytm zabezpieczania opcji przeprowadzamy przyjmując rehedging codzienny. 
+
 ```{r, echo=FALSE, cache=TRUE}
 ######
 transaction_fee = 0.004
@@ -2502,8 +2501,15 @@ for (i in 1:20) {
 
 ```
 
+Rozpocznijmy analizę powyższych wykresów od skupienia się na pewnej ustalonej wartości ceny wykonania (tj. na pewnej pojedynczej kolumnie wykresów) aby skupić się na wpływie różnicy w przyjętych zmiennościach. Jak mogliśmy się spodziewać, strategia zabezpieczająca zwraca najlepsze rezultaty, gdy poziomy zmienności są sobie równe - wtedy odchylenie standardowe jest najmniejsze. Ciekawa sytuacja występuje w przypadku przeszacowania zmienności rynkowej, tj. wtedy kiedy zachodzi $\sigma_R < \sigma_W$, bowiem wówczas średnia jest dodatnia, więc teoretycznie średnio 'zarabiamy' podczas zabezpieczania (mówienie w tej sytuacji o zarabianiu nie jest do końca adekwatne, ponieważ bez uwzględnienia kosztów transakcyjnych jest to dość nierealistyczny scenariusz). Sytuacja znacznie bardziej komplikuje się w przypadku, gdy niedoszacowujemy zmienności, tj. wtedy gdy $\sigma_R > \sigma_W$. Dla każdej z rozważanych cen wykonania, wraz ze wzrostem różnicy między przyjętą zmiennością w portfelu, a zmiennością rynkową obserwujemy zarówno wzrost odchylenia standardowego jak i spadku (poniżej zera) średniej. Nie są to również zmiany niewielkie, bowiem przy wzroście różnicy między poziomami zmienności z 0 do 0.05 oraz z 0.05 do 0.1 wartości odchyleń standardowych stają się w przybliżeniu dwa razy większe. Na podstawie tych obserwacji jesteśmy w stanie wywnioskować, że rozważany przez nas portfel zabezpieczający charakteryzuje się istotnym stopniem czułości na przyjmowany poziom zmienności w stosunku do tego obowiązującego na rynku.
+
+### Wyznaczanie premii za sprzedaż opcji call
+
+Podczas poprzednich analiz mogliśmy zauważyć, że nawet w przypadku gdy posiadaliśmy najlepszą możliwą wiedzę o rynku (czyli gdy zmienność przyjęta w portfelu była równa tej, według której symulowalismh notowania indeksu) podczas procesu sprzedaży i zabezpieczania opcji średnio wychodziliśmy na 0, czyli nic nie zarabialismy, a w przypadku gdy niedoszacowywaliśmy zmienności rynkowej, średnio wychodziliśmy na minus (i to niemało). Wobec tego, można zadać pytanie, czy taka działalność ma jakikolwiek sens dla osoby znajdującej się w naszym położeniu (osoby sprzedającej opcje). W celu uatrakcyjnienia pozycji osoby sprzedającej opcję i przeprowadzającej proces zabezpieczania, możemy wprowadzić pewną premię pieniężną, która będzie niejako rekompensatą za przyjmowane ryzyko; wartość tej premii może zostać wyznaczona biorąc pod uwagę analizę ryzyka jaką przeprowadziliśmy w poprzednim podrozdziale. Przykładowo, rozważmy sprzedaż opcji call o cenie wykonania 1800 i załóżmy, że jesteśmy w stanie wycenić zmienność w granicy błędu 0.05. Aby zabezpieczyć się przed potencjalnymi stratami wynikającymi z błędu estymacji większego niż 0.05 żądamy, aby kupujący opcję dopłacił dodatkowe 20 PLN, abyśmy w przypadku niedoszacowania zmienności średnio i tak wyszli na 0.
 
 ## Porównanie z rzeczywistymi notowaniami WIG20
+
+Na koniec tej części przyjrzyjmy się zastosowaniu omawianej strategii zabezpieczającej do sprzedaży opcji o cenie wykonania 1800 na faktycznych notowaniach historycznych - konkretnie, notowaniach indeksu z roku 2022. Przypomnijmy, że w poprzednim podrozdziale skupialiśmy się na problemie niedoszacowania zmienności - w przypadku operowania na notowaniach historycznych sytuacja komplikuje się o tyle, że zmienność przyszłych notowań nie tylko nie jest nam znana wcześniej, ale również nie musi być ona nawet stała. W obrębie przyjętego przez nas modelu, pozostaje nam jedynie przyjąć pewne oszacowanie i liczyć, że będzie ono dobrze odzwierciedlało rzeczywistość. Ze względu na fakt, że tym razem badamy jeden konkretny przypadek użycia portfela zabezpieczającego możemy nieco dokładniej przyjrzeć się jego rozwojowi w czasie; poniżej przedstawiamy trzy wykresy - pierwszy z nich obrazuje wartości liczbowe delty (czyli jednostek indeksu w portfelu) oraz wartość zainwestowanych bądź pożyczonych środków, drugi przedstawia rozwój zysku lub straty portfela (czyli wartość portfela pomniejszonego o wartość opcji wyznaczoną w oparciu o wzór wynikający z modelu Blacka-Scholesa), a trzeci przedstawia wykres notowań z roku 2022. Strategie zabezpieczającą przeprowadzamy stosując codzienny rehedging oraz przyjmując zmienność jako oszacowanie z wartości zwrotów historycznych z roku poprzedniego, tj. z roku 2021.
 
 ```{r, echo=FALSE, cache=TRUE}
 historic_one_year_back_sigmas = c()
@@ -2660,146 +2666,31 @@ for (i in 1:4) {
     guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
   })
 }
-
-
-put_plots = list(
-  list(),
-  list(),
-  list(),
-  list()
-)
-
-ns = list()
-ks = list()
-ds = list()
-cs = list()
-not = list()
-wo = list()
-pv = list()
-sf = list()
-sh = list()
-
-for (i in 1:4) {
-  ns[[i]] = length(historical_put_hedging_data[[i]][[2]])
-  ks[[i]] = length(wig_historyczne_notowania_list[[i]])
-  
-  ds[[i]] = c(historical_put_hedging_data[[i]][[2]], rep(historical_put_hedging_data[[i]][[2]][ns[[i]]], ks[[i]] - ns[[i]]))
-  cs[[i]] = c(historical_put_hedging_data[[i]][[3]], rep(historical_put_hedging_data[[i]][[3]][ns[[i]]], ks[[i]] - ns[[i]]))
-  not[[i]] = c(wig_historyczne_notowania_list[[i]])
-  wo[[i]] = c(c(historical_put_hedging_data[[i]][[6]]),
-              rep(historical_put_hedging_data[[i]][[3]][n], ks[[i]] - ns[[i]] - 1),
-              max(1800 - wig_historyczne_notowania_list[[i]][ks[[i]]], 0))
-  pv[[i]] = ds[[i]] * not[[i]] + cs[[i]] - wo[[i]]
-  
-  sf[[i]] <- diff(range(ds[[i]])) / diff(range(cs[[i]]))
-  sh[[i]] <- min(ds[[i]]) - min(cs[[i]]) * sf[[i]]
-}
-
-
-for (i in 1:4) {
-  
-  put_plots[[i]][[1]] = local({
-    i = i
-    ggplot() +
-      geom_line(
-        aes(1:ks[[i]], ds[[i]], color = "y1"),
-        linewidth = 0.5
-      ) +
-      geom_line(
-        aes(1:ks[[i]], cs[[i]] * sf[[i]] + sh[[i]], color = "y2"),
-        linewidth = 0.5
-      ) +
-      scale_y_continuous(
-        name = "Delta",
-        sec.axis = sec_axis(
-          ~ (. - sh[[i]]) / sf[[i]],
-          name = "Gotowka"
-        ) 
-      ) + xlab('Czas (lata)') +
-      scale_color_manual(
-        name = "",
-        values = c("y1" = "blue", "y2" = "red"),
-        labels = c("y1" = "Delta", "y2" = "Gotowka")
-      ) + labs(title = 'Wykres skladu portfela wzgledem czasu',
-               subtitle =  bquote('Przyjęta zmienność w portfelu \n zabezpieczającym:' ~ sigma['w'] ~ '=' ~ .(round(historic_one_year_back_sigmas[i], 3)))) +
-      theme_minimal() +
-      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
-            plot.subtitle = element_text(size = text_size, hjust = 0.5),
-            axis.title = element_text(size = text_size),
-            legend.position = "bottom",
-            legend.text = element_text(size = text_size)) +
-      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
-  })
-  
-  
-  put_plots[[i]][[2]] = local({
-    i = i
-    ggplot() + geom_line(
-      aes(1:ks[[i]], pv[[i]], color = "y1"),
-      linewidth = 0.5
-    ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
-      scale_color_manual(
-        name = "",
-        values = c("y1" = "black"),
-        labels = c("y1" = "Roznica miedzy wartoscia portfela replikacyjnego \n a wartoscia opcji")
-      ) + labs(title = 'Zysk/strata \n portfela repilkującego',
-               subtitle = paste('Koncowa roznica \n replikacji = ', round(historical_call_hedging_data[[i]][[1]], 2))) +
-      theme_minimal() +
-      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
-            plot.subtitle = element_text(size = text_size, hjust = 0.5),
-            axis.title = element_text(size = text_size),
-            legend.position = "bottom",
-            legend.text = element_text(size = text_size)) +
-      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
-  })
-  
-  
-  put_plots[[i]][[3]] = local({
-    i = i
-    ggplot() + geom_line(
-      aes(1:ks[[i]], wig_historyczne_notowania_list[[i]], color = "y1"),
-      linewidth = 0.5
-    ) + scale_y_continuous(name = '') + xlab('Czas (lata)') +
-      scale_color_manual(
-        name = "",
-        values = c("y1" = "black"),
-        labels = c("y1" = "Notowania WIG20")
-      ) + labs(title = paste('Notowania z roku: ', lata[i] + 1)) +
-      theme_minimal() +
-      theme(plot.title = element_text(size = text_size, face = "bold", hjust = 0.5),
-            plot.subtitle = element_text(size = text_size, hjust = 0.5),
-            axis.title = element_text(size = text_size),
-            legend.position = "bottom",
-            legend.text = element_text(size = text_size)) +
-      guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 2)))
-  })
-}
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
 ##
-(call_plots[[1]][[1]] | call_plots[[1]][[2]] | call_plots[[1]][[3]])  / 
-  (call_plots[[2]][[1]] | call_plots[[2]][[2]] | call_plots[[2]][[3]])
+(call_plots[[1]][[1]] | call_plots[[1]][[2]] | call_plots[[1]][[3]])  #/ 
+#  (call_plots[[2]][[1]] | call_plots[[2]][[2]] | call_plots[[2]][[3]])
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=6, fig.height=5, fig.align='center', fig.retina=1, dev="cairo_pdf"}
 ##
-(put_plots[[1]][[1]] | put_plots[[1]][[2]] | put_plots[[1]][[3]]) / 
-  (put_plots[[2]][[1]] | put_plots[[2]][[2]] | put_plots[[2]][[3]])
+#(put_plots[[1]][[1]] | put_plots[[1]][[2]] | put_plots[[1]][[3]]) / 
+#  (put_plots[[2]][[1]] | put_plots[[2]][[2]] | put_plots[[2]][[3]])
 ```
 
-
-
-
-### Podrozdział ...
+Analizę powyższych wyników rozpocznijmy od wykresu obrazującego wartości składników portfela w czasie. Zauważmy, że notowania indeksu dla tego roku rozpoczynają się od wartości bliskiej 2230, co oznacza, że zabezpieczana przez nas opcja jest in-the-money, więc delta w portfelu jest bliska jedynki - taki stan utrzymuje się aż notowania indeksu nie zbliżą do ceny wykonania zabezpieczanej opcji, aż w końcu zejdą znacznie poniżej jej, co sprawi, że delta będzie bliska zera. W końcowym okresie roku natomiast, cena indeksu będzie bardzo bliska ceny wykonania opcji, co przełoży się na bliskość delty do wartości 0.5. Warta odnotowania jest również dostrzegalna symetria wykresów obu krzywych względem pewnej linii poziomej. Odnotujmy również na koniec, że na ten przykład realizacji strategii zabezpieczającej był dla nas wyjątkowo stratny - końcowa różnica replikacji wynosiła aż 73.69 PLN. Na wykresie drugim widzimy, że ta strata rosła w dosyć stałym tempie w miarę upływu czasu.
 
 ## Podsumowanie
+
+Rozpoczęliśmy od przedstawienia postaci portfela zabezpieczającego sprzedaż opcji call oraz put wynikającego z modelu Blacka-Scholesa. Następnie, przeanalizowaliśmy na wiele sposobów (analiza rozkładów wartości replikacji, analiza kwantyli oraz odchyleń standardowych) jego skuteczność w zależności od częstotliwość aktualizacji portfela (dla różnych zmienności oraz cen wykonania) oraz zbadaliśmy jego czułość na błędnę oszacowanie zmienności rynkowej. Zakończyliśmy badając konkretny przykład zastosowania algortymu zabezpieczającego w oparciu o notowania historyczne indeksu z roku 2022.
 
 \newpage
 
 # Część B - Delta-Gamma-Hedging opcji call na WIG20 z wykorzystaniem opcji binarnych
 
-W tej rozważamy analogiczny scenariusz jak w przypadku części A z dwoma znaczącymi zmianami. Po pierwsze, wprowadzamy koszty transakcyjne w wysokości $0.04\%$ przy obrocie instrumentami finansowymi w dowolną stronę. Po drugie, dopuszczamy replikacje korzystające nie tylko z samego indeksu WIG20, ale również z opcji binarnych na WIG20, mających takie same ceny wykonania jak opcje waniliowe na WIG20 dostępne na GPW. Dopuszczając dodatkowe aktywo umożliwiamy zatem konstrukcję takich strategii zabezpieczających, które nie są wyłącznie delta-netraulne, ale również gamma-neutralne. Głównym celem tego rozdziału jest próba odnalezienia strategii delta-gamma-neutralnej, która w obecności wspomnianych kosztów transakcyjnych będzie zwracała lepsze rezultaty niż omówiony już standardowy delta-hedging. Wszystkie analizy przeprowadzimy dla przypadku, w którym to zabezpieczaną opcją jest waniliowa opcja call o cenie wykonania $1700$.
+W tej części rozważamy analogiczny scenariusz jak w przypadku części A z dwoma znaczącymi zmianami. Po pierwsze, wprowadzamy koszty transakcyjne w wysokości $0.4\%$ przy obrocie instrumentami finansowymi w dowolną stronę. Po drugie, dopuszczamy replikacje korzystające nie tylko z samego indeksu WIG20, ale również z opcji binarnych na WIG20, mających takie same ceny wykonania jak opcje waniliowe na WIG20 dostępne na GPW. Dopuszczając dodatkowe aktywo umożliwiamy zatem konstrukcję takich strategii zabezpieczających, które nie są wyłącznie delta-netraulne, ale również gamma-neutralne. Głównym celem tego rozdziału jest próba odnalezienia strategii delta-gamma-neutralnej, która w obecności wspomnianych kosztów transakcyjnych będzie zwracała lepsze rezultaty niż omówiony już standardowy delta-hedging. Wszystkie analizy przeprowadzimy dla przypadku, w którym to zabezpieczaną opcją jest waniliowa opcja call o cenie wykonania $1700$.
 
 ## Delta-Hedging w obecności kosztów transakcyjnych
 
@@ -2934,7 +2825,7 @@ call_plot6 = ggplot() +
   )
 ```
 
-Jak widzimy, ...
+Jak widzimy, w przypadku każdej z częstotliwości aktualizowania portfela obserwujemy wzrost odchylenia standardowego oraz spadek średniej po uwzględnieniu kosztów transakcyjnych. Co interesujące, wartości odchyleń standardowych wskazują na to, że optymalną strategią nie jest już codzienne odświeżanie portfela, bowiem mniejsze odchylenie standardowe charakteryzuje chociażby hedging cotygodniowy.
 
 ## Strategie zabezpieczające 
 
@@ -2942,22 +2833,21 @@ Po omówieniu startegii delta-hedginowej w obecności kosztów transakcyjnych je
 
 ## Strategia 1: Naiwny Delta-Gamma-Hedging
 
-Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
+Standardowy portfel naiwnego delta-gamma-hedgingu ma postać:
 
+$$
+\Pi = -V + \alpha S + \beta B
+$$
+gdzie $B$ reprezentuje opcje binarne ustalonego rodzaju, $\alpha$ jest ilością posiadanego aktywa bazowego, a $\beta$ ilością posiadanych opcji binarnych.
+
+Dla jednej opcji binarnej będziemy chcieli, by były spełnione warunki: 
 $$ 
   \frac{\partial \Pi}{\partial S} = - \frac{\partial V}{\partial S}+ \alpha + \beta \frac{\partial B}{\partial S} = 0
 $$
+
 $$ 
 \frac{\partial^2 \Pi}{\partial S^2} = - \frac{\partial^2 V}{\partial S^2} + \beta \frac{\partial^2 B}{\partial S^2} = 0
 $$
-gdzie 
-* S - cena aktywa bazowego
-* V - cena zabezpieczanej opcji waniliowej
-* $\Pi$ - wartość całego portfela
-* B - cena opcji binarnej
-* $\alpha$ - ilość posiadanego aktywa bazowego
-* $\beta$ - ilość posiadanych opcji binarnych
-
 Dla jednej opcji binarnej $\alpha$ i $\beta$ są wyznaczone jednoznacznie:
 $$
   \alpha = \Delta_V - \beta \Delta_B
@@ -2965,20 +2855,7 @@ $$
 $$
   \beta = \frac{\Gamma_V}{\Gamma_B}
 $$
-Gdzie $\Gamma_B$ i $\Gamma_V$ to gammy odpowiednio opcji binarnych i waniliowych, natomiast $\Delta_B$ i $\Delta_V$ to delty odpowiednio dla tych opcji. Tak natomiast wyglądają wzory na gammy opcji binarnych i europejskich:
-$$
-  \Gamma_{Call} = \Gamma_{Put} = \frac{N'(d_1)}{S \sigma \sqrt{T-t}}
-$$
-$$
-  \Gamma_{BinaryPut} = - \Gamma_{BinaryCall} = \frac{d_1 N'(d_2)}{\sigma^2 S^2 (T-t)}
-$$
-$$
-  \Delta_{Call} = N(d_1) = \Delta_{Put} +1
-$$
-$$
-  \Delta_{BinaryCall} = -\Delta_{BinaryPut} = \frac{N'(d_2)}{\sigma S \sqrt{T-t}}
-$$
-gdzie $X(x)$ to dystrybuanta rozkładu normalnego, $N'(x)$ to jego gęstość, $d1=\frac{ln(\frac{S}{K})+(r+\frac{\sigma^2}{2})(T-t)}{\sigma \sqrt{T-t}}$ oraz $d_2 = d_1 - \sigma \sqrt{T-t}$. 
+Gdzie $\Gamma_B$ i $\Gamma_V$ to gammy odpowiednio opcji binarnych i waniliowych, natomiast $\Delta_B$ i $\Delta_V$ to delty odpowiednio dla tych opcji.
 
 ## Analiza strategii 1.
 
@@ -3100,7 +2977,6 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
 
 
 ```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=FALSE}
-
 # plot_PnL_hist <- function(PnL_matrix, slupki) {
 #   # wyciągamy P&L na koniec
 #   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
@@ -3141,6 +3017,7 @@ plot_PnL_hist <- function(PnL_matrix, slupki,
 
 }
 ```
+
 
 ```{r run_gamma_simulation, echo=FALSE, cache=TRUE, fig.width=7, fig.height=7, cache=TRUE}
 #parametry zadania
@@ -3685,11 +3562,11 @@ Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepsz
 
 ### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
-W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Portfela replikujy wygląda następująco:
+W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Postać poortfela replikującego wygląda następująco:
 $$
 \Pi = -V + \alpha S + \beta (B_C^{K_C} + B_P^{K_P}) + B
 $$
-gdzie $B_C^{K_C}$ opcją binarną call o cenie wykonania $K_C$, a $B_P^{K_P}$ opcją binarną put o cenie wykonania $K_P$ (obie opcje binarne mają tą samą zapadalność jak replikowana opcja $V$). Podobnie jak w przypadku poprzednich strategii, chcemy, aby zarówno delta jak i gamma wynosiły $0$, co daje nam, ze parametry $\alpha$ i $\beta$ wynoszą:
+gdzie $B_C^{K_C}$ opcją binarną call o cenie wykonania $K_C$, a $B_P^{K_P}$ opcją binarną put o cenie wykonania $K_P$ (obie opcje binarne mają tą samą zapadalność jak replikowana opcja $V$). Podobnie jak w przypadku poprzednich strategii, chcemy, aby zarówno delta jak i gamma wynosiły $0$, co daje nam, że parametry $\alpha$ i $\beta$ wynoszą:
 
 $$
 \alpha = \frac{\partial V}{\partial S} - (\frac{\partial B_C^{K_C}}{\partial S} + \frac{\partial B_P^{K_P}}{\partial S})\dfrac{\frac{\partial^2 V}{\partial S^2}}{\frac{\partial^2 B_C^{K_C}}{\partial S^2} + \frac{\partial^2 B_P^{K_P}}{\partial S^2}} = \Delta_V - (\Delta_{B_C} + \Delta_{B_P})\frac{\Gamma_V}{\Gamma_{B_C} + \Gamma_{B_P}}
@@ -3998,13 +3875,13 @@ means_plot
 sds_plot
 ```
 
-Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają jak najwyższą średnią oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy do jść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.06, 0.065\}$ oraz $K^* \in \{600, 650, 700\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedginu - jak się później przekonamy (podczas analizy czułości na zmienność rynkową oraz porównaniu obu strategii na notowaniach historycznych), tak jednak nie jest.
+Zależy nam oczywiście na wyborze takiej pary parametrów $\epsilon$ i $K^*$, dla których różnice między wartością portfela a payoffem opcji mają średnią bliską zera oraz jak najmniejsze odchylenie standardowe. Po przeanalizowaniu powyższych wartości, możemy dojść do wniosku, że strategia zwraca najlepsze rezultaty, gdy $\epsilon \in \{0.06, 0.065\}$ oraz $K^* \in \{600, 650, 700\}$. Dla takich par wspomniane statystyki średniej i odchylenia standardowego są bliskie (w niektórych przypadkach nawet lepsze) tym odpowiadającym standardowemu delta-hedgingowi. Istotnym pytaniem jest, czy dla takich wartości parametrów (a w szczególności tak wysokich wartości $K^*$) ta strategia nie degeneruje się do wspomnianego standardowego delta-hedgingu. Gdy jednak spojrzy się na proces rozwoju składu portfela konkretnych realizacji tej strategii, można zauważyć, że wartości opcji binarnych odgrywają tam ważną rolę (dodatkowo, jak zobaczymy później, w pewnych realiach rynkowych strategie te będą się zauważalnie różnić). 
 
 #### Analiza strategii 3.  
 
 \leavevmode\par
 
-W poprzednim podrozdziale wyznaczyliśmy zbiór parametrów $\epsilon$ i $K^*$, dla których startegia zwracała najlepsze wyniki pod względem średniej oraz odchylenia standardowego. W tym podrozdziale przeanalizujemy dokładniej stategię korzystając z wartości parametrów $(\epsilon, K^*) = (0.06, 650)$. Następnie porównamy ją ze standardową strategią delta-hedgingową, zarówno na notowaniach symulacyjnych jak i historycznych. Rozpoczniemy od analizy histogramu różnic między portfelem replikacyjnym, a payoffem replikowanej opcji.
+W poprzednim podrozdziale wyznaczyliśmy zbiór parametrów $\epsilon$ i $K^*$, dla których startegia zwracała najlepsze wyniki pod względem średniej oraz odchylenia standardowego. W tym podrozdziale przeanalizujemy dokładniej stategię korzystając z wartości parametrów $(\epsilon, K^*) = (0.06, 650)$. Następnie porównamy ją ze standardową strategią delta-hedgingową. Rozpoczniemy od analizy histogramu różnic między portfelem replikacyjnym, a payoffem replikowanej opcji.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=3, fig.width=6, fig.align='centre', cache=TRUE}
 ##
@@ -4030,9 +3907,11 @@ plotbsgh_hist + plot_annotation(
   )
 ```
 
-(komentarz do histogramu)
+Jak widzimy, histogram wygląda podobnie do histogramów charakteryzujących strategie delta-hedgingowe - obserwujemy umiarkowaną symetrię oraz przesunięcie wykresu na lewo od zera (w przybliżeniu o wartość średniej).
 
-Przy opisie strategii wspomnieliśmy, że rolą parametru $\epsilon$ jest ograniczenie liczby transakcji - w obecności niezerowych kosztów transakcyjnych jest to oczywiście coś pożądanego w strategii replikującej, o ile nie wpływa zbyt negatywnie na jej skuteczność. W przypadku rozważanej przez nas wartości parametru $\epsilon$ dostrzegamy istotną redukcję liczby transakcji, bowiem średnio aktualizujemy portfel `r round(mean(gamma_hedging_data_list[[13]][[12]][[4]]))` razy, a ponieważ przy każdej aktualizacji portfela dokonujemy zmian w liczbie posiadanego indeksu WIG20 i liczbie posiadanych opcji binarnych, średnio wykonujemy `r 2*round(mean(gamma_hedging_data_list[[13]][[12]][[4]]))` transakcji.
+Przy opisie strategii wspomnieliśmy, że rolą parametru $\epsilon$ jest ograniczenie liczby transakcji - w obecności niezerowych kosztów transakcyjnych jest to oczywiście coś pożądanego w strategii zabezpieczającej, o ile nie wpływa zbyt negatywnie na jej skuteczność. W przypadku rozważanej przez nas wartości parametru $\epsilon$ dostrzegamy istotną redukcję liczby transakcji, bowiem średnio aktualizujemy portfel `r round(mean(gamma_hedging_data_list[[13]][[12]][[4]]))` razy, a ponieważ przy każdej aktualizacji portfela dokonujemy zmian w liczbie posiadanego indeksu WIG20 i liczbie posiadanych opcji binarnych, średnio wykonujemy `r 2*round(mean(gamma_hedging_data_list[[13]][[12]][[4]]))` transakcji, co znacznie wpływa na ograniczenie kosztów.
+
+Rozważmy teraz problem omawiany już w części A - błędne oszacowanie zmienności rynkowej. Zauważyliśmy wtedy, że efektywność zabezpieczania strategią delta-hedginową była zależna od poprawnego oszacowania zmienności rynkowej. Analogiczną analizę możemy przeprowadzić dla rozważanej obecnie strategii gamma-hedgingowej - symulując notowania przyjmując pewien poziom zmienności rynkowej (oznaczanej ponownie przez $\sigma_R$) oraz przyjmując inny poziom zmienności portfelowej (oznaczanej przez $\sigma_W$) możemy zbadać rozkład końcowych wartości replikacji. Zamiast analizować wykresy histogramów, skupimy się ponownie jedynie na wartości odchyleń standardowych oraz średnich, które przedstawiamy w poniższych tabelach (DH - strategia delta-hedgingowa, BSGDH - obecnie badana strategia).
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=7, fig.width=7, cache=TRUE}
 ######
@@ -4137,7 +4016,7 @@ kable(bsgh_dh_data_table_sds)
 kable(bsgh_dh_data_table_means)
 ```
 
-(komentarz do tabeli wyników dla roznych zmienności)
+Wartości z powyższych tabeli wskazują nam przede wszystkim na dwie rzeczy - w przypadku zarówno przeszacowania oraz dobrego oszacowania zmienności (czyli $\sigma_W \ge \sigma_R$) strategia delta-hedgingowa wydaje się być nieco lepsza niż strateguia gamma-hedgingowa. Jednak, w przypadku niedoszacowania zmienności (czyli $\sigma_W < \sigma_R$) to strategia gamma-hedgingowa zdaje się być lekko lepsza - dla przypadku $\sigma_R = 0.25$ wartości odchyleń standardowych odpowiadającym obu strategią zdają się być w przybliżeniu równe, ale średnia dla strategii gamma-hedgingowej jest bliższa zeru. W przypadku większego niedoszacowania, tj. wtedy gdy $\sigma_R = 0.3$, efekt jest większe - tym razem nie tylko średnia jest lepsza dla strategii gamma-hedgingowej, ale również odchylenie standardowe jest istotnie mniejsze.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE, include=FALSE}
 wig20_2022_notowania = wig20_data %>% filter(year(Data) == 2022) %>% pull(Otwarcie)
@@ -4213,7 +4092,7 @@ p2 = ggplot(df2_long, aes(x = x, y = wartosc, group = linia)) + ylim(min(pv_dh_m
 )
 ```
 
-```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE}
+```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE, include = FALSE}
 ##
 wig20_2022_gamma_hedging_data = BS_gamma_hedging_algorithm(eps, 0.004, NA, NA, 0.2, NA, 0.05, 1, 250, 1, 1700, real_prices = wig20_2022_notowania, strike_premium = strike_p, beta_upper_limit = 10^4)
 n = length(wig20_2022_gamma_hedging_data[[2]])
@@ -4266,36 +4145,17 @@ ggplot() +
 
 ```
 
-(komentarz do wygladu portfela dla przykladowego hedgingu na notowaniach historycznych)
-
 ## Podsumowanie
 
-(kilka słów podsumowania, omówinie rezultatów 3 strategii i porównanie ich z delta-hedgingiem)
+Rozpoczęliśmy od przedstawienia i przeanalizowania strategii delta-hedginowej w obecności kosztów transakcyjnych. Następnie, omówiliśmy 3 różne strategie zabezpieczające oparte już nie o ideę delta-hedgingu, ale gamma-hedgingu - rozpoczelismy od tzw. naiwnego gamma-hedgingu, a następnie przedstawiliśmy jego bardziej zaawansowane wersje. Każdą z tych strategii przeanalizowaliśmy pod kątem ich efektywności oraz porównaliśmy z rezultatmi związanymi ze strategią delta-hedgingową.
 
 \newpage
 
 # Dodatek
 
-## Rozwiązanie równania Blacka-Scholesa i wzory na delty w portfelu zabezpieczającym
-
-W części A w zwięzły sposób wyprowadziliśmy równanie Blacka-Scholesa oraz przedstawiliśmy skład portfela zabezpieczającego, który repilkuje payoff pewnej opcji. Implementacja strategii zabezpieczającej, którą również w tej części analizowaliśmy, wymaga znajomości dokładnych wartości numerycznych wartości opcji $V$ (czyli rozwiązania wspomnianego równania Blacka-Scholesa) oraz jej pochodnej po $S$, czyli $\frac{\partial V}{\partial S}$ - poniżej przedstawiamy dokładne wzory analityczne tych funkcji:
-$$
-C = SN(d_1) - Ke^{-rT}N(d_2)
-$$
-$$
-P = -SN(-d_1) + Ke^{-rT}N(-d_2)
-$$
-$$
-d_1 = \frac{\text{log}(S/K) + (r - \frac{\sigma^2}{2})T}{\sigma \sqrt{T}}, \;\;\;\;\;\;\; d_2 = d_1 - \sigma \sqrt{T}
-$$
-gdzie $C$ i $P$ są odpowiednio wartościami (cenami) opcji call i put w chwili $0$, $T$ jest czasem do zapadnięcia opcji, $K$ jest ceną wykonania, $r$ stopą wolną od ryzyka, $\sigma$ zmiennością indeksu WIG20, a $N(x)$ jest wartością dystrybuanty standardowego rozkładu normalnego w punkcie $x$. Wówczas, odpowiednie delty, czyli przy przyjętych oznaczeniach $\frac{\partial C}{\partial S}$ i $\frac{\partial P}{\partial S}$ mają postać:
-$$
-\frac{\partial C}{\partial S} = N(d_1), \;\;\;\;\;\;\; \frac{\partial P}{\partial S} = N(d_1) - 1
-$$
-
 ## Symulacje notowań aktywów
 
-W tym rozdziale krótko opisujemy metody symulacji notowań wykorzystywane w poprzednich rozdziałach; wszystkie z nich można podzielić na tzw. metodę standardową oraz na metodę bootstrappową - pierwsza z nich odnosi się do symulowania Geometrycznego Ruchu Browna, którego odpowiednia parametryzacja umożliwia modelowanie notowań wielu różnorodnych aktywów, a druga odnosi się do korzystania z procedury bootstrapingu, czyli z próbkowania ze zbioru danych historycznych danego aktywa w celu generowania nowych notowań. Szczegóły dla odrębnych zastosowań obu metod przedstawiamy w poniższych podrozdziałach. 
+W tym podrozdziale krótko opisujemy metody symulacji notowań wykorzystywane w poprzednich rozdziałach; wszystkie z nich można podzielić na tzw. metodę standardową oraz na metodę bootstrappową - pierwsza z nich odnosi się do symulowania Geometrycznego Ruchu Browna, którego odpowiednia parametryzacja umożliwia modelowanie notowań wielu różnorodnych aktywów, a druga odnosi się do korzystania z procedury bootstrapingu, czyli z próbkowania ze zbioru danych historycznych danego aktywa w celu generowania nowych notowań. Szczegóły dla odrębnych zastosowań obu metod przedstawiamy w poniższych podrozdziałach. 
 
 ### Symulacje notowań pojedynczego aktywa
 
@@ -4364,11 +4224,34 @@ $$
 $$
 S_{t_n}^{(2)} = S_{0}^{(2)}(1 + R_{i_{1}}^{(2)})(1 + R_{i_{2}}^{(2)})...(1 + R_{i_{n}}^{(2)}).
 $$
-Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane..
+Losując zwroty w ten sposób, jesteśmy w stanie w procesie symulacji uwzględnić fakt, że zwroty $R_i^{(1)}$ i $R_i^{(2)}$ są ze sobą skorelowane.
+
+## Wzory na współczynniki greckie w portfelach zabezpieczających
+
+W części A oraz B wprowadzaliśmy portfele zabezpieczające wynikające z modelu Blacka-Scholesa. Ich implementacja, wymaga znajomości dokładnych wartości numerycznych pochodnych $V$ po $S$, czyli $\frac{\partial V}{\partial S}$ oraz $\frac{\partial^2 V}{\partial S^2}$. Poniżej przedstawiamy dokładne wzory analityczne tych funkcji, w zależności od tego czy opcja $V$ jest opcją waniliową czy binarną:
+
+$$
+\frac{\partial C}{\partial S} = N(d_1), \;\;\;\;\;\;\; \frac{\partial P}{\partial S} = N(d_1) - 1
+$$
+$$
+\frac{\partial B_C}{\partial S} = \frac{e^{-rT}N'(d_2)}{\sigma S \sqrt{T}}, \;\;\;\;\;\;\; \frac{\partial B_P}{\partial S} = -\frac{e^{-rT}N'(d_2)}{\sigma S \sqrt{T}}
+$$
+$$
+\frac{\partial^2 C}{\partial S^2} = \frac{N'(d_1)}{\sigma S \sqrt{T}}, \;\;\;\;\;\;\; \frac{\partial^2 P}{\partial S^2} = \frac{N'(d_1)}{\sigma S \sqrt{T}}
+$$
+
+$$
+\frac{\partial^2 B_C}{\partial S^2} = -\frac{e^{-rT}d_1N'(d_2)}{\sigma^2 S^2 T}, \;\;\;\;\;\;\; \frac{\partial^2 B_P}{\partial S^2} = \frac{e^{-rT}d_1N'(d_2)}{\sigma^2 S^2 T}
+$$
+
+$$
+d_1 = \frac{\text{log}(S/K) + (r - \frac{\sigma^2}{2})(T )}{\sigma \sqrt{T}}, \;\;\;\;\;\;\; d_2 = d_1 - \sigma \sqrt{T}
+$$
+gdzie $C$ i $P$ są odpowiednio wartościami waniliowych opcji call i put, $B_C$ i $B_P$ są odpowiednio wartościami opcji binarnych call i put, $T$ jest czasem do zapadnięcia opcji, $K$ jest ceną wykonania, $r$ stopą wolną od ryzyka, $\sigma$ zmiennością, a $N(x)$ jest wartością dystrybuanty standardowego rozkładu normalnego w punkcie $x$.
 
 ## P&L dla opcji PUT i CALL
 
-Powyżej zostało powiedziane, że bez straty ogólności, wystarczy przeprowadzać analizę dla hedgingu jedynie opcji CALL, albo PUT, gdyż wyniki dla drugiej są jednakowe. Przeprowadzimy rozumowanie prowadzące do tego wniosku.
+W części A zostało powiedziane, że bez straty ogólności, wystarczy przeprowadzać analizę dla hedgingu jedynie opcji CALL, albo PUT, gdyż wyniki dla drugiej są jednakowe. Przeprowadzimy rozumowanie prowadzące do tego wniosku.
 
 ### Parytet PUT-CALL
 
