@@ -44,7 +44,7 @@ W tej części zajmiemy się omówieniem większości pojęć pojawiających si�
 
 ## Indeks WIG20
 
-Instrumentem bazowym, z którym będziemy pracować jest indeks WIG20. Obliczany od 16 kwietnia 1994 roku, jest indeksem giełdowym reprezentującym kondycję 20 największych (pod względem kapitalizacji) spółek notowanych na GPW z zastrzeżeniem, że z jednego sektora nie może znaleźć się tam więcej niż 5 spółek; wpływ poszczególnych spółek jest ważony ich kapitalizacją. Wartość indeksu można bezpośrednio wyznaczyć ze wzoru^[Szczegóły dotyczące wyznaczania dokładnej wartości indeksu można uzyskać na stronie internetowej www.gpwbenchmark.pl.]:
+Instrumentem bazowym, z którym będziemy pracować jest indeks WIG20. Obliczany od 16 kwietnia 1994 roku, jest indeksem giełdowym reprezentującym kondycję 20 największych (pod względem kapitalizacji) spółek notowanych na GPW (z zastrzeżeniem, że z jednego sektora nie może znaleźć się tam więcej niż 5 spółek); wpływ poszczególnych spółek jest ważony ich kapitalizacją. Wartość indeksu można bezpośrednio wyznaczyć ze wzoru^[Szczegóły dotyczące wyznaczania dokładnej wartości indeksu można uzyskać na stronie internetowej www.gpwbenchmark.pl.]:
 $$
 \text{WIG20} = \dfrac{\sum P_i S_i}{\sum P_i^{(0)} S_i K}I_0
 $$
@@ -82,7 +82,6 @@ $$
 gdzie $R_i$ jest $i$-tym zwrotem, $\hat{\mu}$ i $\hat{\sigma}$ są estymatorami odpowiednio dryfu (rocznego) i zmienności (rocznej), a $\Delta t$ 'krokiem czasowym' (dla każdego roku mamy średnio $250$ notowań, czyli średnio $\Delta t = \frac{1}{250}$).
 
 Aby uzyskać wyniki symulacji jak najbardziej pasujące do rzeczywistych notowań, potrzebujemy jak najlepsze oszacowanie wartości parametrów $\mu$ i $\sigma$ - w tym celu, wyznaczymy wartości estymatorów $\hat{\mu}$ i $\hat{\sigma}$ korzystając z dziennych zwrotów indeksu z czterech różnych okresów - końcem każdego z nich jest 31 grudnia 2021 roku, a początkami - 1 stycznia roku 2021, 2020, 2019 i 2018. Dla takich okresów otrzymujemy następujące wartości estymatorów:
-
 
 ```{r, echo=FALSE}
 # Wyznaczanie zwrotów i dodanie ich do tabeli z danymi
@@ -125,6 +124,8 @@ rownames(drift_vol_estimates) <- c("mu", "sigma")
 ```
 
 Porównując otrzymane wartości z wcześniej omawianym wykresem notowań indeksu WIG20 łatwo zauważyć skąd się bierze ich zmiana, a w szczególności spadek wartości estymatora $\mu$ wraz z wydłużaniem okresu estymacji - biorąc zwroty z kolejnych lat przed 2021 rokiem, uwzględniamy okres, w którym nie tylko miał miejsce duży spadek wartości indeksu w ogóle (pandemia COVID-19), ale również trend zmian indeksu był negatywny (okres przed 2020).
+
+Przejdźmy teraz do analizy rozkładu dziennych zwrotów wartości indeksu. Przypomnijmy, że zgodnie z m.in. modelem Blacka-Scholesa owe zwroty powinny mieć rozkład normalny. ABy zweryfikować te tezę przeanalizujmy histogramy (wraz z dopasowanymi krzywymi gęstości odpowiednio sparametryzowanych rozkładów normalnych) oraz przeprowadźmy standardowy test zgodności Shapiro-Wilka. Analogicznie jak w przypadku estymacji dryfu i zmienności, rozważymy zwroty z czterech różnych okresów.
 
 ```{r, echo=FALSE, cache = TRUE, fig.width=6, fig.height=5, fig.align='center'}
 dane_2021_zwroty <- wig20_data %>% filter(year(Data) == 2021) %>% pull(Zwrot)
@@ -182,8 +183,6 @@ for (i in 1:4) {
 (hists_list[[1]] | hists_list[[2]] ) / (hists_list[[3]] | hists_list[[4]])
 ```
 
-(wykresy normalności zwrotów historycznych, wnioski - tylko w pierwszym przypadku widzimy dobre dopasowanie, w pozostałych przypadkach ciężkie ogony mocno wpływają na wariancję)
-
 ```{r, echo=FALSE, cache = TRUE}
 shapiro_tests = list(
   shapiro.test(dane_list[[1]]),
@@ -218,9 +217,11 @@ kable(results,
 
 ```
 
+Analizę rozpocznijmy od histogramów - jak widzimy, każdy z nich przypomina kształtem (do pewnego stopnia) charakterystyczny wygląd krzywej gęstości rozkładu normalnego. Gdy przyjrzymy się dokładniej, dostrzeżemy, że przypadek związany ze zwrotami okresu z roku $2021$ jest w istocie najlepiej dopasowany do dorysowanej krzywej; w każdym z pozostałych przypadków moda rozkładu wystaje wyraźnie nad ową krzywą, a wartości leżące wokół mody leżą pod krzywą. Fakt ten znadjuje odzwierciedlenie w wynikach testu zgodności Shapiro-Wilka - jedynie w przypadku zwrotów z okresu roku $2021$ procedura testowania nie prowadzi do odrzucenia hipotezy, że rozkład zwrotów jest normalny.
+
 ## Symulacja zmian cen indeksu WIG20
 
-Po wyznaczeniu wartości estymatorów dryfu i zmienności możemy przejść do symulowania notowań oraz porównania ich z realnymi notowaniami indeksu WIG20. Symulacje przeprowadzimy dwiema metodami - metodą standardową, opartej o założenie, że notowania indeksu są realizacją odpowiednio sparametryzowanego Geometrycznego Ruchu Browna oraz metodą bootstrapową, opartą o losowanie zwrotów z danych historycznych i wykorzystanie ich do konstruowania notowań - szczegóły obu metod zamieszczamy w Dodatku (ostatni rozdział).
+Po wyznaczeniu wartości estymatorów dryfu i zmienności możemy przejść do symulowania notowań oraz porównania ich z realnymi notowaniami indeksu WIG20. Symulacje przeprowadzimy dwiema metodami - metodą standardową, opartą o założenie, że notowania indeksu są realizacjami odpowiednio sparametryzowanego Geometrycznego Ruchu Browna oraz metodą bootstrapową, opartą o losowanie zwrotów z danych historycznych i wykorzystanie ich do konstruowania notowań - szczegóły obu metod zamieszczamy w Dodatku (ostatni rozdział).
 
 Dla obu metod przeprowadzamy cztery osobne szeregi symulacji. Każdy z szeregów związany jest z jednym z okresów zdefiniowanych w poprzednim podrozdziale; w przypadku symulacji wykonanych metodą standardową, symulacja związana z danym okresem oznacza, że korzystamy z wartości estymatorów $\hat{\mu}$ i $\hat{\sigma}$ uzyskanych dla danego okresu, a w przypadku symulacji wykonanych metodą bootstrapową, symulacja związana z danym okresem oznacza, że losujemy zwroty historyczne z danego okresu.
 
@@ -483,6 +484,8 @@ legend_plot_boot <- ggplot() +
 ```
 
 Analizując wykresy symulacji przeprowadzonych metodą bootstrapową dochodzimy do analogicznych wniosków jak w przypadku poprzednim - również w każdym z czterech przypadków końcowa wartość indeksu leży wyraźnie poniżej mediany (w przypadku pierwszego okresu, ponownie, nawet poniżej kwantyla pięcioprocentowego) i większość notowań oscyluje wokół krzywej kwantylowej pięcioprocentowej. Obserwacje dotyczące rozrzutu końcowych wartości symulowanych notowań są również podobne; w przypadku okresu pierwszego rozrzut jest najmniejszy, a w przypadku drugiego - największy.
+
+Przejdźmy teraz do analizy normalności zwrotów z roku 2022 oraz zwrotów wysymulowanych notowań (obiema metodami). Analogicznie jak w przypadku badania normalności w poprzednim podroziadziale
 
 ```{r return_histograms_2022, echo=FALSE, fig.width=12, fig.height=4, out.width="100%", cache=TRUE}
 reset = 3
