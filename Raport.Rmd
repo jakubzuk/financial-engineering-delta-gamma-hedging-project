@@ -3244,6 +3244,8 @@ W momencie rehedgingu pozycje są aktualizowane do nowych wartości, a koszty tr
 
 Głównymi parametrami strategii są $\text{band}_{\Delta}$ (tolerancja na zmianę delty portfela) oraz $\text{band}_{\Gamma}$ (tolerancja na zmianę gammy portfela). Im większe pasma, tym rzadziej następuje rehedging, co zmniejsza koszty, ale zwiększa straty spowodowane oddaleniem od ciągłego modelu hedgingu.
 
+Do hedgowania użyjemy opcji binarnych o strike takim samym co zabezpieczana opcja call.
+
 ## Analiza strategii 2.
 
 ```{r band_gamma, echo=FALSE, cache=TRUE}
@@ -3679,6 +3681,47 @@ means_plot / sds_plot
 ```
 
 Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
+
+Może być to spowodowane bardzo ostrym i wąskim profilem gammy opcji binarnej co powoduje 
+
+```{r, echo=FALSE}
+
+K     <- 1700
+r     <- 0.05
+sigma <- 0.173
+T     <- 1.0          
+S_seq <- seq(1000, 2400, length.out = 500)
+
+binary_gamma <- function(S, K, r, sigma, T) {
+  tau <- T
+  d1 <- (log(S/K) + (r + 0.5*sigma^2)*tau) / (sigma * sqrt(tau))
+  d2 <- d1 - sigma * sqrt(tau)
+  N_prime_d2 <- dnorm(d2)                    
+  gamma <- (d1 * N_prime_d2) / (sigma^2 * S^2 * tau)
+  return(gamma)
+}
+
+df <- data.frame(
+  S = S_seq,
+  Gamma = binary_gamma(S_seq, K, r, sigma, T)
+)
+
+ggplot(df, aes(x = S, y = Gamma)) +
+  geom_line(color = "blue", linewidth = 1.1) +
+  geom_vline(xintercept = K, color = "red", linetype = "dashed", linewidth = 1) +
+  annotate("text", x = K + 30, y = max(df$Gamma)*0.85, 
+           label = "Strike K = 1700", color = "red", size = 4.5, hjust = 0) +
+  labs(
+    title = "Gamma opcji binarnej ",
+    subtitle = paste("Parametry: σ =", sigma, "| r =", r, "| T =", T, "roku"),
+    x = "Cena aktywa bazowego (S)",
+    y = "Gamma"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 11))
+
+```
 
 ### Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
