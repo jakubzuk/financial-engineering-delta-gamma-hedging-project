@@ -1283,7 +1283,7 @@ cor_plot_2
 
 Z wykresu trajektorii możemy wyciągnąć wnioski, iż jest to do pewnego stopnia skorelowane, gdyż możemy zauważyć, że peaki są w bardzo podobnych momentach czasu. Oczywistym jest, że będą pojawiać się różnice pomiędzy wartościami, o jakie wzrastają/spadają trajektorie, natomiast może to wynikać z tego, że WIG20 jest indeksem opierającym się nie tylko na wartości KGHM, ale też na 19 innych akcjach.
 
-## Opcje na WIG20
+## Opcje na WIG20^[Dane pochodzą ze strony GPW: https://www.gpw.pl/standardy-warunki-obrotu]
 
 Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrumentami pochodnymi, w tym europejskimi, waniliowymi opcjami CALL i PUT na indeks WIG20. Instrumenty te charakteryzują się następującymi własnościami:
 
@@ -1431,8 +1431,6 @@ $$\text{Payoff} = \max{(S(T) - K, 0)}$$
 Dla opcji PUT:
 
 $$\text{Payoff} = \max{(K - S(T), 0)}$$
-
-(KID, standard - STRONA GPW https://www.gpw.pl/standardy-warunki-obrotu)
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 
@@ -3082,7 +3080,8 @@ koszty <- 0.004
 slupki <- 100
 
 # trajektorie
-S_paths <- t(simulations[[1]])
+# S_paths <- t(simulations[[1]])
+S_paths = t(gbm_simulation(2270, 0.1, 0.2, 1, 251, 10000))
 sigma_est <- drift_vol_estimates["sigma", "2021"]
 
 # bierzemy co 'by' punkt w czasie + zawsze ostatni punkt
@@ -3152,7 +3151,7 @@ W momencie rehedgingu pozycje są aktualizowane do nowych wartości, a koszty tr
 
 Głównymi parametrami strategii są $\text{band}_{\Delta}$ (tolerancja na zmianę delty portfela) oraz $\text{band}_{\Gamma}$ (tolerancja na zmianę gammy portfela). Im większe pasma, tym rzadziej następuje rehedging, co zmniejsza koszty, ale zwiększa straty spowodowane oddaleniem od ciągłego modelu hedgingu.
 
-Do hedgowania użyjemy opcji binarnych o strike takim samym co zabezpieczana opcja call.
+Do hedgowania użyjemy opcji binarnych o strike równym połowie striku zabezpieczanej opcji call. Szerokość pasm poddana dokładniejszej analizie została wyznaczona na podstawie testów ze zdefiniowaną funkcją straty oraz analizy grek portfela na różnych trajektoriach.
 
 ### Analiza strategii 2.
 
@@ -3180,8 +3179,8 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
     tau0 <- T
     delta1 <- call_delta(S[1], K, r, sigma, tau0)
     gamma1 <- call_gamma(S[1], K, r, sigma, tau0)
-    delta2 <- binary_call_delta(S[1], K, r, sigma, tau0)
-    gamma2 <- binary_call_gamma(S[1], K, r, sigma, tau0)
+    delta2 <- binary_call_delta(S[1], 0.5 * K, r, sigma, tau0)
+    gamma2 <- binary_call_gamma(S[1], 0.5 * K, r, sigma, tau0)
     
     if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
     
@@ -3189,7 +3188,7 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
     beta <- beta / (1 + abs(beta) / 50)           
     alpha <- -(delta1 + beta * delta2)
     
-    C2_0 <- binary_call_price(S[1], K, r, sigma, tau0)
+    C2_0 <- binary_call_price(S[1], 0.5 * K, r, sigma, tau0)
     initial_cost <- cost_rate * (abs(alpha) * S[1] + abs(beta) * C2_0)
     
     V <- V - initial_cost
@@ -3204,20 +3203,20 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
     for (t in 1:(m - 1)) {
       tau <- max(T - (t - 1) * dt, dt)
       
-      C2_t <- binary_call_price(S[t], K, r, sigma, tau)
+      C2_t <- binary_call_price(S[t], 0.5 * K, r, sigma, tau)
       
       if (t == (m - 1)) {
         C1_next <- max(S[t + 1] - K, 0)
-        C2_next <- ifelse(S[t + 1] > K, 1, 0)
+        C2_next <- ifelse(S[t + 1] > 0.5 * K, 1, 0)
       } else {
         C1_next <- call_price(S[t + 1], K, r, sigma, tau - dt)
-        C2_next <- binary_call_price(S[t + 1], K, r, sigma, tau - dt)
+        C2_next <- binary_call_price(S[t + 1], 0.5 * K, r, sigma, tau - dt)
       }
       
       delta1 <- call_delta(S[t], K, r, sigma, tau)
       gamma1 <- call_gamma(S[t], K, r, sigma, tau)
-      delta2 <- binary_call_delta(S[t], K, r, sigma, tau)
-      gamma2 <- binary_call_gamma(S[t], K, r, sigma, tau)
+      delta2 <- binary_call_delta(S[t], 0.5 * K, r, sigma, tau)
+      gamma2 <- binary_call_gamma(S[t], 0.5 * K, r, sigma, tau)
       
       if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
       
@@ -3286,7 +3285,7 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=10, fig.height=6}
 
-bands_delta <- c(0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01)
+bands_delta <- c(0.002, 0.003, 0.005, 0.0075, 0.01, 0.025)
 band_gamma_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3485,7 +3484,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r, echo=FALSE, cache=TRUE, fig.height=14, fig.width=11, warning=FALSE}
 
-delta_values <- seq(0.001, 0.01, by = 0.001)
+delta_values <- seq(0.002, 0.03, by = 0.002)
 gamma_values <- seq(0.00005, 0.0005, by = 0.00005)
 
 mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
@@ -3588,7 +3587,7 @@ means_plot / sds_plot
 
 ```
 
-Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
+Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $\Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
 
 ## Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
