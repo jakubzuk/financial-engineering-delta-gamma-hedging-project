@@ -40,7 +40,7 @@ Niniejszy tekst jest raportem projektu 1: "Delta i Gamma Hedging" realizowanym w
 
 # Część 0 - Indeks WIG20, Symulacje notowań, Opcje
 
-W tej części zajmiemy się omówieniem większości pojęć pojawiających się w pozostałych dwóch częściach projektu. Rozpoczniemy od przedstawienia instrumentu finansowego będącego w centrum naszego zainteresowania, czyli indeksu giełdowego *WIG20* - omówimy go krótko pod kątem finansowym, po czym przyjrzymy się właściwościom jego notowań na *Warszawskiej Giełdzie Papierów Wartościowych* (GPW); w szczególności, zbadamy rozkład jego dziennych zwrotów i porównamy otrzymane wyniki z modelem, według którego rozwój cen indeksu WIG20 jest pewną realizacją *Geometrycznego Ruchu Browna*. Po dokonaniu tych porównań, przeprowadzimy szereg symulacji (metodą standardową oraz bootstrapową) Geometrycznego Ruchu Browna (parametryzowanego wartościami uzyskanymi na podstawie estymacji danych historycznych indeksu WIG20) i skonfrontujemy wyniki symulacji z faktycznymi notowaniami indeksu; rozważymy również korelację indeksu WIG20 z notowaniami akcji KGHM, którą zoobrazujemy analogicznymi metodami symulacyjnymi. Na koniec, korzystając z przeprowadzonych symulacji oraz danych giełdowych, omówimy opcje (na indeks WIG20) dostępne dla inwestorów na GPW.
+W tej części zajmiemy się omówieniem większości pojęć pojawiających się w pozostałych dwóch częściach projektu. Rozpoczniemy od przedstawienia instrumentu finansowego będącego w centrum naszego zainteresowania, czyli indeksu giełdowego *WIG20* - omówimy go krótko pod kątem finansowym, po czym przyjrzymy się właściwościom jego notowań na *Warszawskiej Giełdzie Papierów Wartościowych* (GPW); w szczególności, zbadamy rozkład jego dziennych zwrotów i porównamy otrzymane wyniki z modelem, według którego rozwój cen indeksu WIG20 jest pewną realizacją *Geometrycznego Ruchu Browna*. Po dokonaniu tych porównań, przeprowadzimy szereg symulacji (metodą standardową oraz bootstrapową) Geometrycznego Ruchu Browna (parametryzowanego wartościami uzyskanymi na podstawie estymacji danych historycznych indeksu WIG20) i skonfrontujemy wyniki symulacji z faktycznymi notowaniami indeksu; rozważymy również korelację indeksu WIG20 z notowaniami akcji KGHM, którą zobrazujemy analogicznymi metodami symulacyjnymi. Na koniec, korzystając z przeprowadzonych symulacji oraz danych giełdowych, omówimy opcje (na indeks WIG20) dostępne dla inwestorów na GPW.
 
 ## Indeks WIG20
 
@@ -217,7 +217,7 @@ kable(results,
 
 ```
 
-Analizę rozpocznijmy od histogramów - jak widzimy, każdy z nich przypomina kształtem (do pewnego stopnia) charakterystyczny wygląd krzywej gęstości rozkładu normalnego. Gdy przyjrzymy się dokładniej, dostrzeżemy, że przypadek związany ze zwrotami okresu z roku $2021$ jest w istocie najlepiej dopasowany do dorysowanej krzywej; w każdym z pozostałych przypadków moda rozkładu wystaje wyraźnie nad ową krzywą, a wartości leżące wokół mody leżą pod krzywą. Fakt ten znadjuje odzwierciedlenie w wynikach testu zgodności Shapiro-Wilka - jedynie w przypadku zwrotów z okresu roku $2021$ procedura testowania nie prowadzi do odrzucenia hipotezy, że rozkład zwrotów jest normalny.
+Analizę rozpocznijmy od histogramów - jak widzimy, każdy z nich przypomina kształtem (do pewnego stopnia) charakterystyczny wygląd krzywej gęstości rozkładu normalnego. Gdy przyjrzymy się dokładniej, dostrzeżemy, że przypadek związany ze zwrotami okresu z roku $2021$ jest w istocie najlepiej dopasowany do dorysowanej krzywej; w każdym z pozostałych przypadków moda rozkładu wystaje wyraźnie nad ową krzywą, a wartości leżące wokół mody leżą pod krzywą. Fakt ten znajduje odzwierciedlenie w wynikach testu zgodności Shapiro-Wilka - jedynie w przypadku zwrotów z okresu roku $2021$ procedura testowania nie prowadzi do odrzucenia hipotezy, że rozkład zwrotów jest normalny.
 
 ## Symulacja zmian cen indeksu WIG20
 
@@ -647,7 +647,7 @@ qq3 <- ggplot(data.frame(x = boot_returns_sample), aes(sample = x)) +
 qq1 | qq2 | qq3
 ```
 
-Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych (dokładniej: test nie daje nam argumentów do odrzucenia tezy o normalności co daje nadzieję na dostateczne dopasowanie narzędzi modelu GBM) - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego. Zauważmy jeszcze na koniec, że uzyskana normalność symulowanych notowań jest w pewnym sensie oczekiwana - w poprzednim rozdziale zweryfikowaliśmy normalność rozkładu zwrotów z roku $2021$, a zwroty symulowanych notowań, które teraz badaliśmy, są bezpośrednio powiązane właśnie z tymi zwrotami historycznymi.
+Wnioski z powyższych wykresów są takie same jak te wynikające z testu Shapiro-Wilka - w przypadku zwrotów z trajektorii symulacji przeprowadzonych metodą standardową oraz bootstrapową obserwujemy bliskie dopasowanie wartości do linii referencyjnej, na podstawie czego możemy wnioskować o zgodności z założeniem o normalności rozkładu zwrotów dziennych (dokładniej: test nie daje nam argumentów do odrzucenia tezy o normalności, co daje nadzieję na dostateczne dopasowanie narzędzi modelu GBM) - w przypadku zwrotów historycznych sytuacja wygląda jednak inaczej; widzimy duże odchylenia przy końcach linii referencyjnej, więc możemy odrzucić tezę, że dane historyczne pochodzą z rozkładu normalnego. Zauważmy jeszcze na koniec, że uzyskana normalność symulowanych notowań jest w pewnym sensie oczekiwana - w poprzednim rozdziale zweryfikowaliśmy normalność rozkładu zwrotów z roku $2021$, a zwroty symulowanych notowań, które teraz badaliśmy, są bezpośrednio powiązane właśnie z tymi zwrotami historycznymi.
 
 Oddalenie od kwantyli rozkładu normalnego obserwowane dla danych historycznych wskazuje na powód potencjalnych problemów z weryfikacją wyników symulacji na danych historycznych.
 
@@ -1098,11 +1098,11 @@ results <- data.frame(
 )
 ```
 
-W tym krótkim podrozdziale zajmiemy się przedstawieniem interesującego zjawiska - korelacji notowań dwóch różnych aktywów. Jednym z nich jest omawiany już indeks WIG20, a drugim - akcje spółki KGHM. Ze względu na fakt, że akcje spółki KGHM wchodzą w skład indeksu WIG20 naturalnym jest oczekiwanie, że wzrost lub spadek notowań akcji KGHM będzie miało bezpośredni wpływ na notowania indeksu WIG20. Mniej oczywistym może być fakt, że podobna relacja zachodzi również w drugą stronę - replikując indeks WIG20 (tj. jego sklad, bo samym indeksem handlować nie można) handluje się w efekcie akcjami KGHM, co wpływa na ich cenę.
+W tym krótkim podrozdziale zajmiemy się przedstawieniem interesującego zjawiska - korelacji notowań dwóch różnych aktywów. Jednym z nich jest omawiany już indeks WIG20, a drugim - akcje spółki KGHM. Ze względu na fakt, że akcje spółki KGHM wchodzą w skład indeksu WIG20 naturalnym jest oczekiwanie, że wzrost lub spadek notowań akcji KGHM będzie miało bezpośredni wpływ na notowania indeksu WIG20. Mniej oczywistym może być fakt, że podobna relacja zachodzi również w drugą stronę - replikując indeks WIG20 (tj. jego skład, bo samym indeksem handlować nie można) handluje się w efekcie akcjami KGHM, co wpływa na ich cenę.
 
 Podstawową miarą powiązania dwóch aktywów jest współczynnik korelacji Pearsona, szeroko stosowany nie tylko w analizie rynków finansowych; obliczamy go biorąc jako zmienne dzienne zwroty obu aktywów, czyli korzystamy z następującego wzoru:
 $$
-\hat{\rho} = \dfrac{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(2)})(R_i^{(2)} - \overline{R}_i^{(1)})}{\sqrt{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(1)})^2 \sum_{i = 1}^n (R_i^{(2)} - \overline{R}_i^{(2)})^2}} = \dfrac{\hat{\text{Cov}}(R^{(1)}, R^{(2)})}{\sqrt{\hat{\sigma}^{(1)}}\sqrt{\hat{\sigma}^{(2)}}}
+\hat{\rho} = \dfrac{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(2)})(R_i^{(2)} - \overline{R}_i^{(1)})}{\sqrt{\sum_{i = 1}^n(R_i^{(1)} - \overline{R}_i^{(1)})^2 \sum_{i = 1}^n (R_i^{(2)} - \overline{R}_i^{(2)})^2}} = \dfrac{\hat{\text{Cov}}(R^{(1)}, R^{(2)})}{{\hat{\sigma}^{(1)}}{\hat{\sigma}^{(2)}}}
 $$
 Po zastosowaniu go na zwrotach dziennych notowań indeksu WIG20 i notowań akcji KGHM z wcześniej rozważanych okresów otrzymujemy następujące wartości:
 
@@ -1291,7 +1291,7 @@ Poza handlem akcjami i indeksami, na GPW odbywa się również handel instrument
 z marcowego cyklu kwartalnego (marzec, czerwiec,
 wrzesień, grudzień)
 
-* dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii. 
+* dzień wygaśnięcia: trzeci piątek miesiąca wygaśnięcia danej serii
 
 * ceny strike opcji przyjmują wartości całkowite co 50 punktów (dla indeksu wig20)
 
@@ -1536,7 +1536,7 @@ c6 <- plot_payoff_hist(ST_values, strikes[6], "CALL", x_limits, y_limits)
   )
 ```
 
-Jak widzimy, dla rozważanych cen wykonania większość symulowanych notowań osiąga wartości końcowe, które sprawiają, że opcje są in-the-money, czyli posiadaczowi opłaca się je wykonać. Dla najniższej z przyjętych cen wykonania (1800) rozkład wykazuje pewien poziom symetrii wokół średniej (linia przerywana), jednakże wraz zewzrostem ceny wykonania obserwujemy zanik owej symetrii i wzrost silnej prawoskośności; w szczególności, dla ceny wykonania większych od 2000 moda rozkładu nie jest już wartością bliską średniej, ale występuje w okolicy zera.
+Jak widzimy, dla rozważanych cen wykonania większość symulowanych notowań osiąga wartości końcowe, które sprawiają, że opcje są in-the-money, czyli posiadaczowi opłaca się je wykonać. Dla najniższej z przyjętych cen wykonania (1800) rozkład wykazuje pewien poziom symetrii wokół średniej (linia przerywana), jednakże wraz ze wzrostem ceny wykonania obserwujemy zanik owej symetrii i wzrost silnej prawoskośności; w szczególności, dla ceny wykonania większych od 2000 moda rozkładu nie jest już wartością bliską średniej, ale występuje w okolicy zera.
 
 ```{r, echo=FALSE}
 strikes <- c(3000, 3100, 3200, 3300, 3400, 3500)
@@ -1617,7 +1617,7 @@ gdzie $S$ w rozważanym przez nas przypadku jest indeksem WIG20, a $B$ jest ilo�
 
 Załóżmy, że możemy dokonywać aktualizacji portfela w chwilach $t_0, t_1, ...,t_n$, $t_0 = 0$ oraz, że w każdej z tych chwil znamy wartość (oznaczaną przez $S_{t_i}$) indeksu WIG20. W chwili $t_0 = 0$ sprzedajemy jedną opcję o wartości $V_0$ (krótka pozycja) oraz kupujemy indeks WIG20 (długa pozycja) w ilości $\Delta_0 = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_0}$. Pozostałe środki finansowe, czyli $C_0 = V_0 - \Delta_0$ inwestujemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$ (w następnej chwili ich wartość wynosi więc $C_{t_1} = C_0e^{r(t_1 - t_0)}$). 
 
-Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, czyli (zakładając, że obecna chwila to $t_i$): sprzedajemy posiadaną ilość (czyli $\Delta_{t_{i - 1}}$) indeksu WIG20, po czym kupujemy $\Delta_{t_{i}} = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_{t_i}}$ indeksu WIG20. Pozostałe środki finansowe, czyli $C_{t_i} = C_{t_{i - 1}}e^{r(t_{i} - t_{i - 1})} - (\Delta_{t_{i}} - \Delta_{t_{i - 1}})S_{t_i}$ inwestyjemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$. 
+Dalej, w każdej z następujących chwil aktualizujemy naszą pozycję długą, czyli (zakładając, że obecna chwila to $t_i$): sprzedajemy posiadaną ilość (czyli $\Delta_{t_{i - 1}}$) indeksu WIG20, po czym kupujemy $\Delta_{t_{i}} = \left.\frac{\partial V}{\partial S}\right\vert_{S = S_{t_i}}$ indeksu WIG20. Pozostałe środki finansowe, czyli $C_{t_i} = C_{t_{i - 1}}e^{r(t_{i} - t_{i - 1})} - (\Delta_{t_{i}} - \Delta_{t_{i - 1}})S_{t_i}$ inwestujemy (bądź pożyczamy, w zależności od znaku) ze stopą wolną od ryzyka $r$. 
 
 Zakładając, że dokonujemy aktualizacji portfela dostatecznie często, tak skonstruowany portfel powinien replikować payoff danej opcji z dowolnie zadaną dokładnością. 
 
@@ -1625,7 +1625,7 @@ Przy naszych założeniach okazuje się, że rozumowanie i wyniki dla europejski
 
 ## Analiza wpływu częstotliwości re-hedgingu
 
-Jak już wspomnieliśmy przy omawianiu postaci portfela zabezpieczającego, jego skuteczność jest powiązana z założeniem o jego ciągłym odswieżaniu, co jak już zauważyliśmy jest niemożliwe do spełnienia - jesteśmy zatem skazani na aktualizowanie portfela w ograniczonej liczbie chwil. Naturalnym podejściem (jak zobaczymy części B nie jedynym) jest dokonywanie tej aktualizacji w równie oddalonych momentach czasu (z góry ustalonych). Rozważmy zatem następujące 6 możliwości: rehedging codzienny (czylo około 250 rehedgingów w ciągu roku), rehedging co dwa dni (około 125 rehedgingów w ciągu roku), rehedging co cztery dni (około 63 rehedgingi w ciągu roku), rehedging tygodniowy (około 35 rehedgingów w ciągu roku), rehedging co miesiąc (12 rehedgingów w ciągu roku) oraz prawie statytyczny hedging (pojedynczy reheding w ciągu roku). Aby zbadać różnice między tymi strategiami przyjrzymy się ich realizacjom w przypadku zabezpieczania opcji call o cenie wykonania 1800, korzystając z wysymulowanych notowań indeksu WIG20 (przyjmując zmienność na poziomie $0.2$ oraz dryf na poziomie $0.1$). Analizując rozkład końcowej wartości portfela zabezpieczającego (czyli wartości posiadanego indeksu w chwili końcowej oraz zainwestowanej lub pożyczonej gotówki pomniejszonej o payoff opcji call) będziemy w stanie stwierdzić, jak zmiana częstotliwości rehedgingu wpływa na jego efektywność.
+Jak już wspomnieliśmy przy omawianiu postaci portfela zabezpieczającego, jego skuteczność jest powiązana z założeniem o jego ciągłym odświeżaniu, co jak już zauważyliśmy jest niemożliwe do spełnienia - jesteśmy zatem skazani na aktualizowanie portfela w ograniczonej liczbie chwil. Naturalnym podejściem (jak zobaczymy części B nie jedynym) jest dokonywanie tej aktualizacji w równie oddalonych momentach czasu (z góry ustalonych). Rozważmy zatem następujące 6 możliwości: rehedging codzienny (czylo około 250 rehedgingów w ciągu roku), rehedging co dwa dni (około 125 rehedgingów w ciągu roku), rehedging co cztery dni (około 63 rehedgingi w ciągu roku), rehedging tygodniowy (około 35 rehedgingów w ciągu roku), rehedging co miesiąc (12 rehedgingów w ciągu roku) oraz prawie statytyczny hedging (pojedynczy reheding w ciągu roku). Aby zbadać różnice między tymi strategiami przyjrzymy się ich realizacjom w przypadku zabezpieczania opcji call o cenie wykonania 1800, korzystając z wysymulowanych notowań indeksu WIG20 (przyjmując zmienność na poziomie $0.2$ oraz dryf na poziomie $0.1$). Analizując rozkład końcowej wartości portfela zabezpieczającego (czyli wartości posiadanego indeksu w chwili końcowej oraz zainwestowanej lub pożyczonej gotówki pomniejszonej o payoff opcji call) będziemy w stanie stwierdzić, jak zmiana częstotliwości rehedgingu wpływa na jego efektywność.
 
 ```{r, include = FALSE}
 #   Funkcja przeprowadzająca algorytm delta-hedgingowy
@@ -2284,7 +2284,7 @@ p_put <- ggplot(filter(quantiles_long, option == "PUT"),
   theme(legend.position = "bottom")
 ```
 
-Zgodnie z przewidywaniami linie kwantylowe odległe od siebie dla rzadkiego rehedgingu, zbiegają do mediany dla hedgingu częstego. Ponownie gdybyśmy rozważyli granicę rehedgingu ciągłego, dostalibyśmy linie kwantylowe nakłądające się na siebie. Na powyższych wykresach, zwłaszcza dla opcji PUT, widać cięzkie ogony, które rozciągają skrajne krzywe kwantylowe mocno w kierunku wartości skrajnych. Mediana niezależnie od częstotliwości hedgowania jest bliska zeru i wraz ze zwiększaniem częstotliwości, zbiega bliżej zera. Ta obserwacja pokrywa się z wnioskiem o dążeniu histogramów do miary Diraca w zerze wraz ze zwiększaneim częstotliwości, więc jest to spójne z poprzednimi obserwacjami.
+Zgodnie z przewidywaniami linie kwantylowe odległe od siebie dla rzadkiego rehedgingu, zbiegają do mediany dla hedgingu częstego. Ponownie gdybyśmy rozważyli granicę rehedgingu ciągłego, dostalibyśmy linie kwantylowe nakłądające się na siebie. Na powyższych wykresach, zwłaszcza dla opcji PUT, widać ciężkie ogony, które rozciągają skrajne krzywe kwantylowe mocno w kierunku wartości skrajnych. Mediana niezależnie od częstotliwości hedgowania jest bliska zeru i wraz ze zwiększaniem częstotliwości, zbiega bliżej zera. Ta obserwacja pokrywa się z wnioskiem o dążeniu histogramów do miary Diraca w zerze wraz ze zwiększaneim częstotliwości, więc jest to spójne z poprzednimi obserwacjami.
 
 ### Jak często jest wystarczająco często?
 
@@ -2535,7 +2535,7 @@ Podczas poprzednich analiz mogliśmy zauważyć, że nawet w przypadku gdy posia
 
 ## Porównanie z rzeczywistymi notowaniami WIG20
 
-Na koniec tej części przyjrzyjmy się zastosowaniu omawianej strategii zabezpieczającej do sprzedaży opcji o cenie wykonania 1800 na faktycznych notowaniach historycznych - konkretnie, notowaniach indeksu z roku 2022. Przypomnijmy, że w poprzednim podrozdziale skupialiśmy się na problemie niedoszacowania zmienności - w przypadku operowania na notowaniach historycznych sytuacja komplikuje się o tyle, że zmienność przyszłych notowań nie tylko nie jest nam znana wcześniej, ale również nie musi być ona nawet stała. W obrębie przyjętego przez nas modelu, pozostaje nam jedynie przyjąć pewne oszacowanie i liczyć, że będzie ono dobrze odzwierciedlało rzeczywistość. Ze względu na fakt, że tym razem badamy jeden konkretny przypadek użycia portfela zabezpieczającego możemy nieco dokładniej przyjrzeć się jego rozwojowi w czasie; poniżej przedstawiamy trzy wykresy - pierwszy z nich obrazuje wartości liczbowe delty (czyli jednostek indeksu w portfelu) oraz wartość zainwestowanych bądź pożyczonych środków, drugi przedstawia rozwój zysku lub straty portfela (czyli wartość portfela pomniejszonego o wartość opcji wyznaczoną w oparciu o wzór wynikający z modelu Blacka-Scholesa), a trzeci przedstawia wykres notowań z roku 2022. Strategie zabezpieczającą przeprowadzamy stosując codzienny rehedging oraz przyjmując zmienność jako oszacowanie z wartości zwrotów historycznych z roku poprzedniego, tj. z roku 2021.
+Na koniec tej części przyjrzyjmy się zastosowaniu omawianej strategii zabezpieczającej do sprzedaży opcji o cenie wykonania 1800 na faktycznych notowaniach historycznych - konkretnie, notowaniach indeksu z roku 2022. Przypomnijmy, że w poprzednim podrozdziale skupialiśmy się na problemie niedoszacowania zmienności - w przypadku operowania na notowaniach historycznych sytuacja komplikuje się o tyle, że zmienność przyszłych notowań nie tylko nie jest nam znana wcześniej, ale również nie musi być ona nawet stała. W obrębie przyjętego przez nas modelu, pozostaje nam jedynie przyjąć pewne oszacowanie i liczyć, że będzie ono dobrze odzwierciedlało rzeczywistość. Ze względu na fakt, że tym razem badamy jeden konkretny przypadek użycia portfela zabezpieczającego możemy nieco dokładniej przyjrzeć się jego rozwojowi w czasie; poniżej przedstawiamy trzy wykresy - pierwszy z nich obrazuje wartości liczbowe delty (czyli jednostek indeksu w portfelu) oraz wartość zainwestowanych bądź pożyczonych środków, drugi przedstawia rozwój zysku lub straty portfela (czyli wartość portfela pomniejszonego o wartość opcji wyznaczoną w oparciu o wzór wynikający z modelu Blacka-Scholesa), a trzeci przedstawia wykres notowań z roku 2022. Strategię zabezpieczającą przeprowadzamy stosując codzienny rehedging oraz przyjmując zmienność jako oszacowanie z wartości zwrotów historycznych z roku poprzedniego, tj. z roku 2021.
 
 ```{r, echo=FALSE, cache=TRUE}
 historic_one_year_back_sigmas = c()
@@ -2896,10 +2896,18 @@ d2 <- function(S, K, r, sigma, T) {
   d1(S,K,r,sigma,T) - sigma*sqrt(T)
 }
 
+call_gamma <- function(S, K, r, sigma, T) {
+  dnorm(d1(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
+}
+
+binary_call_gamma <- function(S, K, r, sigma, T) {
+  - exp(-r*T) * dnorm(d2(S,K,r,sigma,T)) * d1(S,K,r,sigma,T) / (S^2 * sigma^2 * T)  # ZMIANA
+}
+
+
 #wartości opcji
 call_price <- function(S, K, r, sigma, T) {
-  S * pnorm(d1(S,K,r,sigma,T)) -
-    K * exp(-r*T) * pnorm(d2(S,K,r,sigma,T))
+  S * pnorm(d1(S,K,r,sigma,T)) -  K * exp(-r*T) * pnorm(d2(S,K,r,sigma,T))
 }
 
 call_delta <- function(S, K, r, sigma, T) {
@@ -2908,28 +2916,20 @@ call_delta <- function(S, K, r, sigma, T) {
 
 #opcje binarne
 binary_call_price <- function(S, K, r, sigma, T) {
-  exp(-r*T) * pnorm(d2(S,K,r,sigma,T))
+  exp(-r*T) * pnorm(d2(S,K,r,sigma,T))  # ZMIANA
 }
 
 binary_call_delta <- function(S, K, r, sigma, T) {
-  dnorm(d2(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
+  exp(-r*T) * dnorm(d2(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
 }
-
-#gammy
-call_gamma <- function(S, K, r, sigma, T) {
-  dnorm(d1(S,K,r,sigma,T)) / (S * sigma * sqrt(T))
-}
-
-binary_call_gamma <- function(S, K, r, sigma, T) {
-  -dnorm(d2(S,K,r,sigma,T)) * d1(S,K,r,sigma,T) / (S^2 * sigma^2 * T)
-}
-
-#gamma-delta-hedging
+  
 gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
+  
   n <- nrow(S_paths)
   m <- ncol(S_paths)
   dt <- T / (m - 1)
   
+  costs = numeric(n)
   # wynik: P&L
   PnL <- matrix(0, n, m)
   
@@ -2937,7 +2937,9 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
     S <- S_paths[i, ]
     
     # początkowe wartości
-    V <- call_price(S[1], K, r, sigma, T)
+    V = 0   # ZMIANA
+    cash <- call_price(S[1], K, r, sigma, T)   # ZMIANA
+    costs[i] = 0
     
     phi_prev <- 0
     w_prev <- 0
@@ -2948,7 +2950,7 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
       # ceny opcji
       C1_t <- call_price(S[t], K, r, sigma, tau)
       C2_t <- binary_call_price(S[t], K, r, sigma, tau)
-            
+      
       if (t == (m - 1)) {
         C1_next <- max(S[t+1] - K, 0)
         C2_next <- ifelse(S[t+1] > K, 1, 0)
@@ -2965,29 +2967,36 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
       gamma2 <- binary_call_gamma(S[t], K, r, sigma, tau)
       
       if (!is.finite(gamma2) || abs(gamma2) < 1e-8) {
-  gamma2 <- 1e-8
-}
+        gamma2 <- 1e-8
+      }
       
-      # nowe pozycje
-      w <- -gamma1 / gamma2
-      w <- w / (1 + abs(w)/50)
-      phi <- -(delta1 + w * delta2)
+      # nowe pozycje            # ZMIANA
+      #w <- ifelse(abs(gamma1 / gamma2) > 10^4, sign(gamma1 / gamma2)*10^4, gamma1 / gamma2)
+      w = gamma1 / gamma2
+      #w <- w / (1 + abs(w)/50)             # ZMIANA
+      phi <- (delta1 - w * delta2)        # ZMIANA
+      
+      
       
       # koszty transakcyjne
-      cost <- cost_rate * (
+      costs[i] <- costs[i] + cost_rate * (
         abs(phi - phi_prev) * S[t] +
           abs(w - w_prev) * C2_t
       )
       
-      # update portfela
-      V <- V +
-        phi * (S[t+1] - S[t]) +
-        w * (C2_next - C2_t) +
-        r * V * dt -
-        cost
+      cash = cash * exp(r*dt) - (phi - phi_prev) * S[t] - (w - w_prev) * C2_t
+      
+      # update portfela         # ZMIANA
+      #V <- V +
+      #  phi * (S[t+1] - S[t]) +
+      #  w * (C2_next - C2_t) +
+      #  r * V * dt -
+      #  cost
+      
+      V = phi * S[t] + w * C2_t + cash  # ZMIANA
       
       # zapis P&L względem opcji
-      PnL[i, t+1] <- V - C1_next
+      PnL[i, t+1] <- V - C1_next - costs[i]  # ZMIANA
       
       # aktualizacja pozycji
       phi_prev <- phi
@@ -3003,21 +3012,6 @@ gamma_delta_hedge <- function(S_paths, K, r, sigma, T, cost_rate) {
 
 
 ```{r plot_gamma_standard, echo=FALSE, fig.width=12, fig.height=5, cache=FALSE}
-# plot_PnL_hist <- function(PnL_matrix, slupki) {
-#   # wyciągamy P&L na koniec
-#   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
-#   
-#   # histogram
-#   hist(final_PnL,
-#        breaks = slupki,
-#        main = "Histogram P&L na koniec okresu",
-#        xlab = paste0("P&L, średnia = ", round(mean(final_PnL), 2)),
-#        col = "blue",
-#        border = "red")
-#   
-#   # dodatkowo: linia średniej
-#   abline(v = mean(final_PnL), col = "red", lwd = 2)
-# }
 
 plot_PnL_hist <- function(PnL_matrix, slupki,
                           title_txt = "Histogram PnL na koniec okresu",
@@ -3046,33 +3040,6 @@ plot_PnL_hist <- function(PnL_matrix, slupki,
 
 
 ```{r run_gamma_simulation, echo=FALSE, cache=TRUE, fig.width=7, fig.height=7, cache=TRUE}
-#parametry zadania
-# T <- 1
-# K <- 1700
-# r <- 0.05
-# koszty <- 0.004
-# slupki <- 100
-# 
-# #symulowane trajektorie
-# #S_paths <- path_gbm(n, m, mu=0.2, sigma=0.2, S0)
-# S_paths <- t(simulations[[1]])
-# #S_paths = S_paths[1:500, ]
-# 
-# n <- nrow(S_paths)
-# m <- ncol(S_paths)
-# S0 <- S_paths[1, 1]
-# 
-# 
-# #hedging
-# part_B <- function(T, S0, K, r, koszty, slupki) {
-# mu_est <- drift_vol_estimates["mu", "2021"]
-# sigma_est <- drift_vol_estimates["sigma", "2021"]
-# hedge <- gamma_delta_hedge(S_paths, K, r, sigma_est, T, koszty)
-# plot_PnL_hist(hedge, slupki)
-# }
-# 
-# part_B(T, S0, K, r, koszty, slupki)
-
 T <- 1
 K <- 1700
 r <- 0.05
@@ -3106,12 +3073,24 @@ make_plot <- function(S_sub, title_txt, xlim_vec) {
   )
 }
 
-p1 <- make_plot(subset_time(S_paths, 1),  "250 re-hedgingow w ciagu roku (codziennie)",  c(-100, 50))
-p2 <- make_plot(subset_time(S_paths, 2),  "125 re-hedgingow w ciagu roku (co dwa dni)",  c(-100, 50))
-p3 <- make_plot(subset_time(S_paths, 4),  "63 re-hedgingi w ciagu roku (co cztery dni)", c(-100, 50))
-p4 <- make_plot(subset_time(S_paths, 7),  "35 re-hedgingow w ciagu roku (co tydzien)",   c(-100, 50))
-p5 <- make_plot(subset_time(S_paths, 21), "12 re-hedgingow w ciagu roku (co miesiac)",   c(-200, 100))
-p6 <- make_plot(S_paths[, c(1, ncol(S_paths)), drop = FALSE], "1 re-hedging w ciagu roku", c(-200, 100))
+h1 <- gamma_delta_hedge(subset_time(S_paths, 1),  K, r, sigma_est, T, koszty)
+h2 <- gamma_delta_hedge(subset_time(S_paths, 2),  K, r, sigma_est, T, koszty)
+h3 <- gamma_delta_hedge(subset_time(S_paths, 4),  K, r, sigma_est, T, koszty)
+h4 <- gamma_delta_hedge(subset_time(S_paths, 7),  K, r, sigma_est, T, koszty)
+h5 <- gamma_delta_hedge(subset_time(S_paths, 21), K, r, sigma_est, T, koszty)
+h6 <- gamma_delta_hedge(S_paths[, c(1, ncol(S_paths)), drop = FALSE], K, r, sigma_est, T, koszty)
+
+all_PnL <- c(h1[, ncol(h1)], h2[, ncol(h2)], h3[, ncol(h3)], 
+             h4[, ncol(h4)], h5[, ncol(h5)], h6[, ncol(h6)])
+
+xlim_common <- quantile(all_PnL, c(0.005, 0.995))
+
+p1 <- make_plot(subset_time(S_paths, 1),  "250 re-hedgingow w ciagu roku (codziennie)",  xlim_common)
+p2 <- make_plot(subset_time(S_paths, 2),  "125 re-hedgingow w ciagu roku (co dwa dni)",  xlim_common)
+p3 <- make_plot(subset_time(S_paths, 4),  "63 re-hedgingi w ciagu roku (co cztery dni)", xlim_common)
+p4 <- make_plot(subset_time(S_paths, 7),  "35 re-hedgingow w ciagu roku (co tydzien)",   xlim_common)
+p5 <- make_plot(subset_time(S_paths, 21), "12 re-hedgingow w ciagu roku (co miesiac)",   xlim_common)
+p6 <- make_plot(S_paths[, c(1, ncol(S_paths)), drop = FALSE], "1 re-hedging w ciagu roku", xlim_common)
 
 (p1 | p2) / (p3 | p4) / (p5 | p6)
 ```
@@ -3165,127 +3144,84 @@ gamma_band_hedge <- function(S_paths, K, r, sigma, T, cost_rate, band_delta, ban
   m <- ncol(S_paths)
   dt <- T / (m - 1)
   
+  costs = numeric(n)
   PnL <- matrix(0, n, m)
   rehedges <- numeric(n)
   
-  # Diagnostyka - zbieramy statystyki
-  delta_stats <- numeric(n)
-  gamma_stats <- numeric(n)
-  
   for (i in 1:n) {
     S <- S_paths[i, ]
-    V <- call_price(S[1], K, r, sigma, T)
-
-    tau0 <- T
-    delta1 <- call_delta(S[1], K, r, sigma, tau0)
-    gamma1 <- call_gamma(S[1], K, r, sigma, tau0)
-    delta2 <- binary_call_delta(S[1], 0.5 * K, r, sigma, tau0)
-    gamma2 <- binary_call_gamma(S[1], 0.5 * K, r, sigma, tau0)
     
-    if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
+    V = 0
+    cash <- call_price(S[1], K, r, sigma, T)
+    costs[i] = 0
     
-    beta <- -gamma1 / gamma2
-    beta <- beta / (1 + abs(beta) / 50)           
-    alpha <- -(delta1 + beta * delta2)
+    phi_prev <- 0
+    w_prev <- 0
+    rehedge_count <- 0
     
-    C2_0 <- binary_call_price(S[1], 0.5 * K, r, sigma, tau0)
-    initial_cost <- cost_rate * (abs(alpha) * S[1] + abs(beta) * C2_0)
-    
-    V <- V - initial_cost
-    
-    phi_prev <- alpha
-    w_prev   <- beta
-    rehedge_count <- 1   
-
-    delta_values_path <- numeric(m-1)
-    gamma_values_path <- numeric(m-1)
-    
-    for (t in 1:(m - 1)) {
-      tau <- max(T - (t - 1) * dt, dt)
+    for (t in 1:(m-1)) {
+      tau <- max(T - (t-1) * dt, dt)
       
-      C2_t <- binary_call_price(S[t], 0.5 * K, r, sigma, tau)
-      
+      C1_t <- call_price(S[t], K, r, sigma, tau)
+      C2_t <- binary_call_price(S[t], K, r, sigma, tau)
+            
       if (t == (m - 1)) {
-        C1_next <- max(S[t + 1] - K, 0)
-        C2_next <- ifelse(S[t + 1] > 0.5 * K, 1, 0)
+        C1_next <- max(S[t+1] - K, 0)
+        C2_next <- ifelse(S[t+1] > K, 1, 0)
       } else {
-        C1_next <- call_price(S[t + 1], K, r, sigma, tau - dt)
-        C2_next <- binary_call_price(S[t + 1], 0.5 * K, r, sigma, tau - dt)
+        C1_next <- call_price(S[t+1], K, r, sigma, tau - dt)
+        C2_next <- binary_call_price(S[t+1], K, r, sigma, tau - dt)
       }
       
       delta1 <- call_delta(S[t], K, r, sigma, tau)
       gamma1 <- call_gamma(S[t], K, r, sigma, tau)
-      delta2 <- binary_call_delta(S[t], 0.5 * K, r, sigma, tau)
-      gamma2 <- binary_call_gamma(S[t], 0.5 * K, r, sigma, tau)
       
-      if (!is.finite(gamma2) || abs(gamma2) < 1e-8) gamma2 <- 1e-8
+      delta2 <- binary_call_delta(S[t], K, r, sigma, tau)
+      gamma2 <- binary_call_gamma(S[t], K, r, sigma, tau)
+      
+      if (!is.finite(gamma2) || abs(gamma2) < 1e-8) {
+        gamma2 <- 1e-8
+      }
       
       w_target <- -gamma1 / gamma2
-      w_target <- w_target / (1 + abs(w_target) / 50)
       
       portfolio_delta <- phi_prev + delta1 + w_prev * delta2
       portfolio_gamma <- gamma1 + w_prev * gamma2
       
-      delta_values_path[t] <- abs(portfolio_delta)
-      gamma_values_path[t] <- abs(portfolio_gamma)
-      
       if (abs(portfolio_delta) > band_delta || abs(portfolio_gamma) > band_gamma) {
-        phi <- -(delta1 + w_target * delta2)
         w <- w_target
+        phi <- -(delta1 + w * delta2)
         rehedge_count <- rehedge_count + 1
       } else {
-        phi <- phi_prev
         w <- w_prev
+        phi <- phi_prev
       }
       
-      cost <- cost_rate * (
+      costs[i] <- costs[i] + cost_rate * (
         abs(phi - phi_prev) * S[t] +
-        abs(w - w_prev) * C2_t
+          abs(w - w_prev) * C2_t
       )
       
-      V <- V + phi*(S[t+1]-S[t]) + w*(C2_next - C2_t) + r*V*dt - cost
-      PnL[i, t + 1] <- V - C1_next
+      cash = cash * exp(r*dt) - (phi - phi_prev) * S[t] - (w - w_prev) * C2_t
+      
+      V = phi * S[t] + w * C2_t + cash
+      
+      PnL[i, t+1] <- V - C1_next - costs[i]
       
       phi_prev <- phi
       w_prev <- w
     }
-    
     rehedges[i] <- rehedge_count
-    delta_stats[i] <- mean(delta_values_path, na.rm = TRUE)
-    gamma_stats[i] <- mean(gamma_values_path, na.rm = TRUE)
   }
-  
-  # Diagnostyka na końcu
-  # cat("\n=== DIAGNOSTYKA DELTA I GAMMA ===\n")
-  # cat("Średnia |portfolio_delta| na ścieżkach:", round(mean(delta_stats), 4), "\n")
-  # cat("Średnia |portfolio_gamma| na ścieżkach:", round(mean(gamma_stats), 4), "\n")
-  # cat("Maksymalna |portfolio_delta|:", round(max(delta_stats), 4), "\n")
-  # cat("Maksymalna |portfolio_gamma|:", round(max(gamma_stats), 4), "\n")
-  # cat("Średnia liczba rehedgingów:", round(mean(rehedges), 2), "\n\n")
   
   return(list(PnL = PnL, rehedges = rehedges))
 }
-
-# mu_est <- drift_vol_estimates["mu", "2021"]
-# sigma_est <- drift_vol_estimates["sigma", "2021"]
-# 
-# band_hedge <- gamma_band_hedge(
-#   S_paths = S_paths,
-#   K = K,
-#   r = r,
-#   sigma = sigma_est,
-#   T = T,
-#   cost_rate = koszty,
-#   band_delta = 0.05,
-#   band_gamma = 1
-# )
-
 
 ```
 
 ```{r, echo=FALSE, cache=TRUE, fig.width=10, fig.height=6}
 
-bands_delta <- c(0.002, 0.003, 0.005, 0.0075, 0.01, 0.025)
+bands_delta <- c(0.0002, 0.0005, 0.001, 0.01, 0.025, 0.05)
 band_gamma_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3385,7 +3321,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r bands_gamma, cache=TRUE, echo=FALSE, fig.width=10, fig.height=6}
 
-bands_gamma <- c(0.00005, 0.00025, 0.0005, 0.00075, 0.001, 0.01)
+bands_gamma <- c(0.000005, 0.000025, 0.00005, 0.0001, 0.0002, 0.00050)
 band_delta_fixed <- 1
 
 S_paths <- S_paths[1:1000, , drop = FALSE]
@@ -3484,7 +3420,7 @@ ggplot(band_results_df, aes(x = PnL)) +
 
 ```{r, echo=FALSE, cache=TRUE, fig.height=14, fig.width=11, warning=FALSE}
 
-delta_values <- seq(0.002, 0.03, by = 0.002)
+delta_values <- seq(0.005, 0.05, by = 0.005)
 gamma_values <- seq(0.00005, 0.0005, by = 0.00005)
 
 mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
@@ -3493,7 +3429,7 @@ mean_matrix <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_value
 sd_matrix   <- matrix(NA, nrow = length(gamma_values), ncol = length(delta_values),
                       dimnames = list(gamma_values, delta_values))
 
-S_paths_optim <- S_paths[1:1000, , drop = FALSE]   
+S_paths_optim <- S_paths[1:900, , drop = FALSE]   
 
 
 for (d in seq_along(delta_values)) {
@@ -3587,11 +3523,12 @@ means_plot / sds_plot
 
 ```
 
-Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $\Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co zgadza się z rezultatem otrzymanym w strategii 1.
+Jak widać na powyższych wykresach, strategia nie przyniosła rezultatów lepszych niż naiwny gamma hedging. Dla dowolnych testowanych szerokości pasm (zarówno dla $\Delta$ i $\Gamma$) koszty transakcyjne pochłaniały cały zysk z dokładniejszego rehedgingu (a nawet więcej) a momenty rehedgowania określone przez zmianę grek portfela były mniej skuteczne niż regularny rehedging co ustalony okres czasu. Co więcej, szerokość pasm i w konsekwencji częstotliwość rehedgingu miała marginalny wpływ na P&L co jest gorsze niż rezultat otrzymany w strategii 1 a nawet wyniki liczbowe wskazują na pogarszanie się  Fiasko tej strategii może być spowodowane zachowaniem gammy opcji binarnej, która zmienia się drastycznie w okolicy ceny strike.
+
 
 ## Strategia 3: Binary Strangle Delta-Gamma-Hedging
 
-W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Postać poortfela replikującego wygląda następująco:
+W przypadku tej strategii, będziemy korzystać z obu typów opcji binarnych z różnymi cenami wykonania, które będą się zmieniać zależnie od aktualnej ceny aktywa bazowego indeksu WIG20. Postać portfela replikującego wygląda następująco:
 $$
 \Pi = -V + \alpha S + \beta (B_C^{K_C} + B_P^{K_P}) + B
 $$
@@ -4045,7 +3982,7 @@ kable(bsgh_dh_data_table_sds)
 kable(bsgh_dh_data_table_means)
 ```
 
-Wartości z powyższych tabeli wskazują nam przede wszystkim na dwie rzeczy - w przypadku zarówno przeszacowania oraz dobrego oszacowania zmienności (czyli $\sigma_W \ge \sigma_R$) strategia delta-hedgingowa wydaje się być nieco lepsza niż strateguia gamma-hedgingowa. Jednak, w przypadku niedoszacowania zmienności (czyli $\sigma_W < \sigma_R$) to strategia gamma-hedgingowa zdaje się być lekko lepsza - dla przypadku $\sigma_R = 0.25$ wartości odchyleń standardowych odpowiadającym obu strategią zdają się być w przybliżeniu równe, ale średnia dla strategii gamma-hedgingowej jest bliższa zeru. W przypadku większego niedoszacowania, tj. wtedy gdy $\sigma_R = 0.3$, efekt jest większe - tym razem nie tylko średnia jest lepsza dla strategii gamma-hedgingowej, ale również odchylenie standardowe jest istotnie mniejsze.
+Wartości z powyższych tabeli wskazują nam przede wszystkim na dwie rzeczy - w przypadku zarówno przeszacowania oraz dobrego oszacowania zmienności (czyli $\sigma_W \ge \sigma_R$) strategia delta-hedgingowa wydaje się być nieco lepsza niż strategia gamma-hedgingowa. Jednak, w przypadku niedoszacowania zmienności (czyli $\sigma_W < \sigma_R$) to strategia gamma-hedgingowa zdaje się być lekko lepsza - dla przypadku $\sigma_R = 0.25$ wartości odchyleń standardowych odpowiadającym obu strategią zdają się być w przybliżeniu równe, ale średnia dla strategii gamma-hedgingowej jest bliższa zeru. W przypadku większego niedoszacowania, tj. wtedy gdy $\sigma_R = 0.3$, efekt jest większe - tym razem nie tylko średnia jest lepsza dla strategii gamma-hedgingowej, ale również odchylenie standardowe jest istotnie mniejsze.
 
 ```{r, echo = FALSE, cache=TRUE, fig.height=4, fig.width=7, cache=TRUE, include=FALSE}
 wig20_2022_notowania = wig20_data %>% filter(year(Data) == 2022) %>% pull(Otwarcie)
@@ -4210,14 +4147,14 @@ Symulując przybliżone realizacje $X_t$ (ruchu Browna) oraz korzystając z wyes
 #### Symulacje metodą bootstrap  
 $\\$
 $\\$
-Symulucje przeprowadzone metodą bootstrappową opieramy o fakt, że notowania aktywa jestesmy w stanie przedstawić jako iloczyn pewnej wartości początkowej i ciągu ułamkowych zmian notowań. W celu wygenerowania pojedynczej trajektorii, losujemy pewną liczbę elementów ze zbioru historycznych zwrotów $\{R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}} : i \in I \}$ (gdzie $I$ definiuje okres, z którego przyrosty będziemy losować), a następnie wyznaczamy wartość notowania w momencie $t_n$ mnożąc wartość początkową $S_0$ i przeskalowane wylosowane przyrosty:
+Symulucje przeprowadzone metodą bootstrappową opieramy o fakt, że notowania aktywa jesteśmy w stanie przedstawić jako iloczyn pewnej wartości początkowej i ciągu ułamkowych zmian notowań. W celu wygenerowania pojedynczej trajektorii, losujemy pewną liczbę elementów ze zbioru historycznych zwrotów $\{R_i = \frac{S_{i} - S_{i - 1}}{S_{i - 1}} : i \in I \}$ (gdzie $I$ definiuje okres, z którego przyrosty będziemy losować), a następnie wyznaczamy wartość notowania w momencie $t_n$ mnożąc wartość początkową $S_0$ i przeskalowane wylosowane przyrosty:
 $$
 S_{t_n} = S_{0}(1 + R_{i_{1}})(1 + R_{i_{2}})...(1 + R_{i_{n}}) = S_0 \frac{S_{i_{1}}}{S_{i_{1} - 1}}\frac{S_{i_{2}}}{S_{i_{2} - 1}}...\frac{S_{i_{n}}}{S_{i_{n} - 1}}
 $$
 
 ### Symulacje notowań dwóch aktywów skorelowanych
 
-W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi 0.69723 (?), co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około $71\%$ zgodności.
+W tym podrozdziale przedstawiamy szczegóły wykorzystanych metod symulacji notowań dwóch aktywów o pewnym współczynniku korelacji. W rzeczywistym świecie różne aktywa są od siebie bardziej lub mniej zależne. WIG20 do pewnego stopnia opierwa się na cenie akcji KGHM, przez co spółka ma jakiś wpływ na notowanie indeksu. Dlatego symulując ich jednoczesne trajektorie metodą ruchów Browna czy metodą bootstrap należy wziąć pod uwagę współczynnik ich skorelowania. Na podstawie danych historycznych ich skorelowanie wynosi od 0.562433 do 0.7601822, w zależności od okresu, co jest stosunkowo dużą korelacją dodatnią. Sugeruje to, że sensownie jest rozważać ich wspólną trajektorię na podstawie skorelowanych ruchów Browna. Historycznie na 1232 dni w 876 z nich zwroty były zgodne (w pozostałych 365 nie), co daje około $71\%$ zgodności.
 
 #### Symulacje metodą standardową (skorelowane Geometryczne Ruchy Browna)  
 $\\$
