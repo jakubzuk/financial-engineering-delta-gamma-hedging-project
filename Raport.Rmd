@@ -3017,12 +3017,13 @@ plot_PnL_hist <- function(PnL_matrix, slupki,
                           title_txt = "Histogram PnL na koniec okresu",
                           subtitle_txt = NULL,
                           xlim_vec = NULL) {
+  
   final_PnL <- PnL_matrix[, ncol(PnL_matrix)]
 
   p <- ggplot() +
     geom_histogram(
       aes(x = as.vector(final_PnL), y = after_stat(density)),
-      bins  = slupki,
+      bins  = 300,
       fill  = "lightblue",
       alpha = 0.7
     ) +
@@ -3034,7 +3035,12 @@ plot_PnL_hist <- function(PnL_matrix, slupki,
       plot.subtitle = element_text(size = 8),
       legend.position = "none"
     )
-
+  
+  if (!is.null(xlim_vec)) {
+    p <- p + coord_cartesian(xlim = xlim_vec)
+  }
+  
+  return(p)
 }
 ```
 
@@ -3046,19 +3052,15 @@ r <- 0.05
 koszty <- 0.004
 slupki <- 100
 
-# trajektorie
-# S_paths <- t(simulations[[1]])
-S_paths = t(gbm_simulation(2270, 0.1, 0.2, 1, 251, 10000))
+S_paths = t(gbm_simulation(2270, 0.1, 0.2, 1, 251, 10001))
 sigma_est <- drift_vol_estimates["sigma", "2021"]
 
-# bierzemy co 'by' punkt w czasie + zawsze ostatni punkt
 subset_time <- function(S, by) {
   idx <- unique(c(seq(1, ncol(S), by = by), ncol(S)))
   S[, idx, drop = FALSE]
 }
 
-# robi hedge + wykres (korzysta z plot_PnL_hist)
-make_plot <- function(S_sub, title_txt, xlim_vec) {
+make_plot <- function(S_sub, title_txt) {
   hedge <- gamma_delta_hedge(S_sub, K, r, sigma_est, T, koszty)
   final_PnL <- hedge[, ncol(hedge)]
 
@@ -3069,28 +3071,15 @@ make_plot <- function(S_sub, title_txt, xlim_vec) {
       "Odchylenie standardowe (z kosztami): ", round(sd(final_PnL), 2),
       "\nSrednia (z kosztami): ", round(mean(final_PnL), 2)
     ),
-    xlim_vec = xlim_vec
-  )
+    xlim_vec = c(-1500, 1000) )       
 }
 
-h1 <- gamma_delta_hedge(subset_time(S_paths, 1),  K, r, sigma_est, T, koszty)
-h2 <- gamma_delta_hedge(subset_time(S_paths, 2),  K, r, sigma_est, T, koszty)
-h3 <- gamma_delta_hedge(subset_time(S_paths, 4),  K, r, sigma_est, T, koszty)
-h4 <- gamma_delta_hedge(subset_time(S_paths, 7),  K, r, sigma_est, T, koszty)
-h5 <- gamma_delta_hedge(subset_time(S_paths, 21), K, r, sigma_est, T, koszty)
-h6 <- gamma_delta_hedge(S_paths[, c(1, ncol(S_paths)), drop = FALSE], K, r, sigma_est, T, koszty)
-
-all_PnL <- c(h1[, ncol(h1)], h2[, ncol(h2)], h3[, ncol(h3)], 
-             h4[, ncol(h4)], h5[, ncol(h5)], h6[, ncol(h6)])
-
-xlim_common <- quantile(all_PnL, c(0.005, 0.995))
-
-p1 <- make_plot(subset_time(S_paths, 1),  "250 re-hedgingow w ciagu roku (codziennie)",  xlim_common)
-p2 <- make_plot(subset_time(S_paths, 2),  "125 re-hedgingow w ciagu roku (co dwa dni)",  xlim_common)
-p3 <- make_plot(subset_time(S_paths, 4),  "63 re-hedgingi w ciagu roku (co cztery dni)", xlim_common)
-p4 <- make_plot(subset_time(S_paths, 7),  "35 re-hedgingow w ciagu roku (co tydzien)",   xlim_common)
-p5 <- make_plot(subset_time(S_paths, 21), "12 re-hedgingow w ciagu roku (co miesiac)",   xlim_common)
-p6 <- make_plot(S_paths[, c(1, ncol(S_paths)), drop = FALSE], "1 re-hedging w ciagu roku", xlim_common)
+p1 <- make_plot(subset_time(S_paths, 1),  "250 re-hedgingow w ciagu roku (codziennie)")
+p2 <- make_plot(subset_time(S_paths, 2),  "125 re-hedgingow w ciagu roku (co dwa dni)")
+p3 <- make_plot(subset_time(S_paths, 4),  "63 re-hedgingi w ciagu roku (co cztery dni)")
+p4 <- make_plot(subset_time(S_paths, 7),  "35 re-hedgingow w ciagu roku (co tydzien)")
+p5 <- make_plot(subset_time(S_paths, 21), "12 re-hedgingow w ciagu roku (co miesiac)")
+p6 <- make_plot(S_paths[, c(1, ncol(S_paths)), drop = FALSE], "1 re-hedging w ciagu roku")
 
 (p1 | p2) / (p3 | p4) / (p5 | p6)
 ```
